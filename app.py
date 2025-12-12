@@ -1,5 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, session, request, jsonify
-from authlib.integrations.flask_client import OAuth
+from flask import Flask, render_template, redirect, url_for, session, request
 import os
 from dotenv import load_dotenv
 import requests
@@ -9,24 +8,21 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
 
-oauth = OAuth(app)
-discord = oauth.register(
-    name='discord',
-    client_id=os.getenv('DISCORD_CLIENT_ID'),
-    client_secret=os.getenv('DISCORD_CLIENT_SECRET'),
-    access_token_url='https://discord.com/api/oauth2/token',
-    access_token_params=None,
-    authorize_url='https://discord.com/api/oauth2/authorize',
-    authorize_params=None,
-    api_base_url='https://discord.com/api/v10/',
-    client_kwargs={'scope': 'identify'},
-)
+# Session security configuration
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour session timeout
 
 @app.route('/')
 def index():
     if 'user_token' in session:
         return redirect(url_for('dashboard'))
-    return render_template('index.html')
+    response = app.make_response(render_template('index.html'))
+    # Prevent caching of login page
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -48,22 +44,6 @@ def login():
     
     return redirect(url_for('dashboard'))
 
-@app.route('/login-oauth')
-def login_oauth():
-    redirect_uri = url_for('callback', _external=True)
-    return discord.authorize_redirect(redirect_uri)
-
-@app.route('/callback')
-def callback():
-    token = discord.authorize_access_token()
-    session['token'] = token
-    
-    resp = discord.get('users/@me')
-    user_data = resp.json()
-    session['user'] = user_data
-    
-    return redirect(url_for('dashboard'))
-
 @app.route('/dashboard')
 def dashboard():
     if 'user_token' not in session:
@@ -74,12 +54,18 @@ def dashboard():
 
     # Fetch user's guilds
     resp = requests.get('https://discord.com/api/v10/users/@me/guilds', headers=headers)
-    
+
     if resp.status_code != 200:
+        session.clear()
         return redirect(url_for('index'))
-    
+
     guilds = resp.json()
-    return render_template('dashboard.html', user=session['user'], guilds=guilds)
+    response = app.make_response(render_template('dashboard.html', user=session['user'], guilds=guilds))
+    # Prevent caching of dashboard page
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route('/api/guild/<guild_id>/channels')
 def get_guild_channels(guild_id):
@@ -93,16 +79,23 @@ def get_guild_channels(guild_id):
         # Fetch channels for this guild
         resp = requests.get(
             f'https://discord.com/api/v10/guilds/{guild_id}/channels',
-            headers=headers
+            headers=headers,
+            timeout=10
         )
-        
+
         if resp.status_code == 200:
             channels = resp.json()
-            # Filter only text channels (type 0)
+            # Filter and return only text channels
             text_channels = [ch for ch in channels if ch.get('type') == 0]
             return {'channels': text_channels}, 200
+        elif resp.status_code == 401:
+            # Token is invalid, clear session
+            session.clear()
+            return {'error': 'Session expired'}, 401
         else:
             return {'error': 'Failed to fetch channels'}, resp.status_code
+    except requests.exceptions.Timeout:
+        return {'error': 'Request timeout'}, 500
     except Exception as e:
         return {'error': str(e)}, 500
 
@@ -113,51 +106,57 @@ def send_message():
 
     user_token = session.get('user_token')
     headers = {'Authorization': user_token, 'Content-Type': 'application/json'}
-    
+
     data = request.json
     channels = data.get('channels', [])
     message_content = data.get('message', '').strip()
-    
+
     if not message_content:
         return {'error': 'Message cannot be empty'}, 400
-    
+
     if not channels:
         return {'error': 'No channels selected'}, 400
-    
-    results = {
-        'success': [],
-        'failed': []
-    }
-    
-    # Send message to each channel
+
+    results = {'success': [], 'failed': []}
+
     for channel in channels:
         channel_id = channel.get('id')
         channel_name = channel.get('name')
-        
+
         try:
             resp = requests.post(
                 f'https://discord.com/api/v10/channels/{channel_id}/messages',
                 headers=headers,
-                json={'content': message_content}
+                json={'content': message_content},
+                timeout=10
             )
-            
-            if resp.status_code == 200:
+
+            if resp.status_code == 200 or resp.status_code == 201:
                 results['success'].append(channel_name)
             elif resp.status_code == 429:
-                # Rate limited - wait and retry
                 results['failed'].append(f'{channel_name} (Rate limited)')
             else:
-                error_msg = resp.json().get('message', 'Unknown error')
+                try:
+                    error_msg = resp.json().get('message', 'Unknown error')
+                except:
+                    error_msg = f'HTTP {resp.status_code}'
                 results['failed'].append(f'{channel_name} ({error_msg})')
+        except requests.exceptions.Timeout:
+            results['failed'].append(f'{channel_name} (Request timeout)')
         except Exception as e:
             results['failed'].append(f'{channel_name} ({str(e)})')
-    
+
     return results, 200
 
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    response = redirect(url_for('index'))
+    # Prevent caching to avoid going back to dashboard after logout
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -9,33 +9,29 @@
 <body>
     <div class="dashboard">
         <nav class="navbar">
-            <div class="logo">
-                <svg width="32" height="32" viewBox="0 0 245 240" fill="currentColor">
-                    <path d="M104.14 0C46.97 0 0 46.97 0 104.14v131.72c0 57.165 46.97 104.14 104.14 104.14h131.72c57.165 0 104.14-46.97 104.14-104.14V104.14C340.04 46.97 293.07 0 235.86 0H104.14z"/>
-                </svg>
-                <span>Discord Panel</span>
-            </div>
-            <div class="nav-right">
-                <div class="user-info">
-                    {% if user.avatar %}
-                        <img src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" alt="{{ user.username }}" class="user-avatar">
-                    {% else %}
-                        <div class="user-avatar-placeholder">{{ user.username[0].upper() }}</div>
-                    {% endif %}
-                    <div class="user-details">
-                        <div class="username">{{ user.username }}</div>
-                        <div class="user-id">#{{ user.discriminator }}</div>
-                    </div>
+            <div class="navbar-content">
+                <div class="navbar-text">
+                    <h1 class="navbar-title">Borz Marketing Panel</h1>
+                    <p class="navbar-subtitle">Select in which servers and channels you would like to automate your marketing</p>
                 </div>
-                <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                <div class="nav-right">
+                    <div class="user-info">
+                        {% if user.avatar %}
+                            <img src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" alt="{{ user.username }}" class="user-avatar">
+                        {% else %}
+                            <div class="user-avatar-placeholder">{{ user.username[0].upper() }}</div>
+                        {% endif %}
+                        <div class="user-details">
+                            <div class="username">{{ user.username }}</div>
+                            <div class="user-id">{{ user.id }}</div>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </div>
             </div>
         </nav>
 
         <div class="dashboard-container">
-            <div class="header">
-                <h1>Discord Message Sender</h1>
-                <p>Select channels and send messages to your Discord servers</p>
-            </div>
 
             {% if guilds %}
                 <div class="main-layout">
@@ -44,6 +40,9 @@
                         <!-- Server List -->
                         <div class="servers-section">
                             <div class="panel-header">Your Servers</div>
+                            <div class="server-search-container">
+                                <input type="text" id="server-search" class="search-input" placeholder="Search servers...">
+                            </div>
                             <div id="servers-list" class="servers-list">
                                 <!-- Servers will be populated by JavaScript -->
                             </div>
@@ -52,8 +51,18 @@
                         <!-- Channels List -->
                         <div class="channels-section">
                             <div class="panel-header">Channels</div>
+                            
+                            <!-- Search Bar -->
+                            <div class="channels-search">
+                                <input type="text" id="channel-search" class="search-input" placeholder="Search channels...">
+                                <div class="search-tags" id="search-tags"></div>
+                            </div>
+                            
                             <div id="channels-list" class="channels-list">
                                 <div class="no-selection">Select a server to view channels</div>
+                            </div>
+                            <div class="channels-notice">
+                                All channels will show up here even if you don't have permission to send messages, due to the unavailability of a feature to check user channel permissions
                             </div>
                         </div>
                     </div>
@@ -63,9 +72,13 @@
                         <!-- Selected Channels -->
                         <div class="selected-section">
                             <div class="panel-header">Selected Channels</div>
+                            <div class="selected-search-container">
+                                <input type="text" id="selected-search" class="search-input" placeholder="Search selected channels...">
+                            </div>
                             <div id="selected-channels-tags" class="selected-channels-tags">
                                 <div class="no-selection">No channels selected</div>
                             </div>
+                            <button class="clear-all-btn" id="clear-all-btn" style="display: none;">Clear All</button>
                         </div>
 
                         <!-- Message Composer -->
@@ -96,6 +109,13 @@
     </div>
 
     <script>
+        // Prevent page from being stored in cache
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+
         // Wait for all elements to load before initializing
         document.addEventListener('DOMContentLoaded', function() {
             const serversList = document.getElementById('servers-list');
@@ -104,32 +124,158 @@
             const sendBtn = document.getElementById('send-btn');
             const charCount = document.getElementById('char-count');
             const selectedChannelsTags = document.getElementById('selected-channels-tags');
-            
+            const channelSearch = document.getElementById('channel-search');
+            const searchTagsContainer = document.getElementById('search-tags');
+            const serverSearch = document.getElementById('server-search');
+            const selectedSearch = document.getElementById('selected-search');
+
             let guilds = [];
             let serverChannels = {}; // Cache for channels by guild ID
             let selectedChannels = []; // Array for multiple channel selection
             let selectedGuild = null; // Currently selected guild
+            let searchTags = []; // Search filter tags
+            let serverSearchText = ''; // Server search filter
+            let selectedSearchText = ''; // Selected channels search filter
+
+            // Check session on API error
+            function handleSessionError(response) {
+                if (response.status === 401) {
+                    alert('Session expired. Please log in again.');
+                    window.location.href = '/';
+                }
+            }
             
-            // Fetch all guilds and build UI
-            async function initializeUI() {
-                guilds = {{ guilds|tojson }};
-                console.log('Guilds loaded:', guilds);
-                
+            // Load saved data from localStorage
+            function loadSelectedChannels() {
+                const saved = localStorage.getItem('selectedChannels');
+                if (saved) {
+                    try {
+                        selectedChannels = JSON.parse(saved);
+                    } catch (e) {
+                        console.error('Error loading saved channels:', e);
+                        selectedChannels = [];
+                    }
+                }
+            }
+
+            function loadMessageText() {
+                const saved = localStorage.getItem('messageText');
+                if (saved && messageInput) {
+                    messageInput.value = saved;
+                    if (charCount) {
+                        charCount.textContent = saved.length;
+                    }
+                }
+            }
+
+            // Save data to localStorage
+            function saveSelectedChannels() {
+                localStorage.setItem('selectedChannels', JSON.stringify(selectedChannels));
+            }
+
+            function saveMessageText() {
+                if (messageInput) {
+                    localStorage.setItem('messageText', messageInput.value);
+                }
+            }
+            
+            // Add search tag
+            function addSearchTag(text) {
+                if (searchTags.length >= 6) {
+                    alert('Maximum 6 tags allowed');
+                    return;
+                }
+                if (!searchTags.includes(text.toLowerCase()) && text.trim()) {
+                    searchTags.push(text.toLowerCase());
+                    updateSearchTagsDisplay();
+                    channelSearch.value = '';
+                    if (selectedGuild) {
+                        renderChannels(selectedGuild);
+                    }
+                }
+            }
+            
+            // Remove search tag
+            function removeSearchTag(tag) {
+                searchTags = searchTags.filter(t => t !== tag);
+                updateSearchTagsDisplay();
+                if (selectedGuild) {
+                    renderChannels(selectedGuild);
+                }
+            }
+            
+            // Update search tags display
+            function updateSearchTagsDisplay() {
+                searchTagsContainer.innerHTML = '';
+                searchTags.forEach(tag => {
+                    const tagEl = document.createElement('div');
+                    tagEl.className = 'search-tag';
+                    tagEl.innerHTML = `
+                        ${tag}
+                        <span class="search-tag-remove" data-tag="${tag}">✕</span>
+                    `;
+                    tagEl.querySelector('.search-tag-remove').addEventListener('click', () => {
+                        removeSearchTag(tag);
+                    });
+                    searchTagsContainer.appendChild(tagEl);
+                });
+            }
+            
+            // Handle search input
+            if (channelSearch) {
+                channelSearch.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && channelSearch.value.trim()) {
+                        addSearchTag(channelSearch.value);
+                    }
+                });
+            }
+
+            // Handle server search input
+            if (serverSearch) {
+                serverSearch.addEventListener('input', (e) => {
+                    serverSearchText = e.target.value.toLowerCase();
+                    renderServers();
+                });
+            }
+
+            // Handle selected channels search input
+            if (selectedSearch) {
+                selectedSearch.addEventListener('input', (e) => {
+                    selectedSearchText = e.target.value.toLowerCase();
+                    updateSelectedDisplay();
+                });
+            }
+            
+            // Render servers list with search filter
+            function renderServers() {
+                if (!serversList) return;
+
+                serversList.innerHTML = '';
+
                 if (!guilds || guilds.length === 0) {
                     serversList.innerHTML = '<div style="color: #949ba4; padding: 1rem;">No servers found</div>';
                     return;
                 }
-                
-                // Render servers
-                guilds.forEach(guild => {
+
+                // Filter guilds by search text
+                const filteredGuilds = guilds.filter(guild =>
+                    guild.name.toLowerCase().includes(serverSearchText)
+                );
+
+                if (filteredGuilds.length === 0) {
+                    serversList.innerHTML = '<div style="color: #949ba4; padding: 1rem;">No servers match search</div>';
+                    return;
+                }
+
+                filteredGuilds.forEach(guild => {
                     const serverItem = document.createElement('div');
                     serverItem.className = 'server-item';
                     serverItem.dataset.guildId = guild.id;
-                    
-                    const iconHtml = guild.icon 
+
+                    const iconHtml = guild.icon
                         ? `<img src="https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png" alt="${guild.name}" class="server-icon">`
                         : `<div class="server-icon-placeholder">${guild.name.charAt(0).toUpperCase()}</div>`;
-                    
+
                     serverItem.innerHTML = `
                         ${iconHtml}
                         <div class="server-info">
@@ -137,10 +283,32 @@
                             <div class="server-count" style="display: none;">0 selected</div>
                         </div>
                     `;
-                    
+
                     serverItem.addEventListener('click', () => selectServer(guild));
                     serversList.appendChild(serverItem);
+
+                    // Update server count based on saved selections
+                    updateServerCount(guild.id);
+
+                    // Restore active state if this is the selected guild
+                    if (selectedGuild && selectedGuild.id === guild.id) {
+                        serverItem.classList.add('active');
+                    }
                 });
+            }
+
+            // Fetch all guilds and build UI
+            async function initializeUI() {
+                loadSelectedChannels();
+                loadMessageText();
+                guilds = {{ guilds|tojson }};
+
+                // Render servers
+                renderServers();
+
+                // Update selected display
+                updateSelectedDisplay();
+                updateSendButton();
             }
             
             // Select a server and load its channels
@@ -158,8 +326,14 @@
                     channelsList.innerHTML = '<div class="no-selection">Loading channels...</div>';
                     try {
                         const response = await fetch(`/api/guild/${guild.id}/channels`);
+
+                        if (!response.ok) {
+                            handleSessionError(response);
+                            return;
+                        }
+
                         const data = await response.json();
-                        
+
                         if (data.channels) {
                             serverChannels[guild.id] = data.channels.filter(ch => ch.type === 0);
                         } else {
@@ -178,13 +352,26 @@
             function renderChannels(guild) {
                 channelsList.innerHTML = '';
                 const channels = serverChannels[guild.id] || [];
-                
+
                 if (channels.length === 0) {
                     channelsList.innerHTML = '<div class="no-selection">No channels found</div>';
                     return;
                 }
+
+                // Filter channels by search tags (OR logic - any tag matches)
+                let filteredChannels = channels;
+                if (searchTags.length > 0) {
+                    filteredChannels = channels.filter(channel =>
+                        searchTags.some(tag => channel.name.toLowerCase().includes(tag))
+                    );
+                }
+
+                if (filteredChannels.length === 0) {
+                    channelsList.innerHTML = '<div class="no-selection">No channels match search</div>';
+                    return;
+                }
                 
-                channels.forEach(channel => {
+                filteredChannels.forEach(channel => {
                     const isSelected = selectedChannels.some(ch => 
                         ch.id === channel.id && ch.guildId === guild.id
                     );
@@ -241,6 +428,9 @@
                     );
                 }
                 
+                // Save to localStorage
+                saveSelectedChannels();
+                
                 // Update UI
                 renderChannels(guild);
                 updateServerCount(guild.id);
@@ -270,54 +460,70 @@
             // Update selected channels display
             function updateSelectedDisplay() {
                 if (selectedChannels.length > 0) {
-                    let tagsHtml = '';
-                    selectedChannels.forEach(channel => {
-                        const iconHtml = channel.guildIcon
-                            ? `<img src="https://cdn.discordapp.com/icons/${channel.guildId}/${channel.guildIcon}.png" alt="${channel.guildName}">`
-                            : `<span>${channel.guildName.charAt(0).toUpperCase()}</span>`;
-                        
-                        tagsHtml += `
-                            <div class="selected-tag">
-                                <div class="tag-icon">${iconHtml}</div>
-                                <div class="tag-text">#${channel.name}</div>
-                                <button class="tag-remove" data-channel-id="${channel.id}" data-guild-id="${channel.guildId}">✕</button>
-                            </div>
-                        `;
-                    });
-                    
-                    selectedChannelsTags.innerHTML = tagsHtml + `<button class="clear-all-btn">Clear All</button>`;
-                    
-                    // Add event listeners
-                    selectedChannelsTags.querySelectorAll('.tag-remove').forEach(btn => {
-                        btn.addEventListener('click', () => {
-                            const channelId = btn.dataset.channelId;
-                            const guildId = btn.dataset.guildId;
-                            selectedChannels = selectedChannels.filter(ch => 
-                                !(ch.id === channelId && ch.guildId === guildId)
-                            );
-                            updateSelectedDisplay();
-                            if (selectedGuild && selectedGuild.id === guildId) {
-                                renderChannels(selectedGuild);
-                            }
-                            updateServerCount(guildId);
-                            updateSendButton();
+                    // Filter channels by search text
+                    let filteredChannels = selectedChannels;
+                    if (selectedSearchText) {
+                        filteredChannels = selectedChannels.filter(channel =>
+                            channel.name.toLowerCase().includes(selectedSearchText) ||
+                            channel.guildName.toLowerCase().includes(selectedSearchText)
+                        );
+                    }
+
+                    if (filteredChannels.length === 0) {
+                        selectedChannelsTags.innerHTML = '<div class="no-selection">No channels match search</div>';
+                    } else {
+                        let tagsHtml = '';
+                        filteredChannels.forEach(channel => {
+                            const iconHtml = channel.guildIcon
+                                ? `<img src="https://cdn.discordapp.com/icons/${channel.guildId}/${channel.guildIcon}.png" alt="${channel.guildName}">`
+                                : `<span>${channel.guildName.charAt(0).toUpperCase()}</span>`;
+
+                            tagsHtml += `
+                                <div class="selected-tag">
+                                    <div class="tag-icon">${iconHtml}</div>
+                                    <div class="tag-text">#${channel.name}</div>
+                                    <button class="tag-remove" data-channel-id="${channel.id}" data-guild-id="${channel.guildId}">✕</button>
+                                </div>
+                            `;
                         });
-                    });
-                    
-                    const clearAllBtn = selectedChannelsTags.querySelector('.clear-all-btn');
-                    if (clearAllBtn) {
-                        clearAllBtn.addEventListener('click', () => {
-                            selectedChannels = [];
-                            updateSelectedDisplay();
-                            if (selectedGuild) {
-                                renderChannels(selectedGuild);
-                            }
-                            guilds.forEach(g => updateServerCount(g.id));
-                            updateSendButton();
+                        selectedChannelsTags.innerHTML = tagsHtml;
+
+                        // Add event listeners for remove buttons
+                        selectedChannelsTags.querySelectorAll('.tag-remove').forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                const channelId = btn.dataset.channelId;
+                                const guildId = btn.dataset.guildId;
+                                selectedChannels = selectedChannels.filter(ch =>
+                                    !(ch.id === channelId && ch.guildId === guildId)
+                                );
+                                saveSelectedChannels();
+                                updateSelectedDisplay();
+                                if (selectedGuild && selectedGuild.id === guildId) {
+                                    renderChannels(selectedGuild);
+                                }
+                                updateServerCount(guildId);
+                                updateSendButton();
+                            });
                         });
                     }
+
+                    // Show external clear all button
+                    const clearAllBtn = document.getElementById('clear-all-btn');
+                    clearAllBtn.style.display = 'block';
+                    clearAllBtn.onclick = () => {
+                        selectedChannels = [];
+                        saveSelectedChannels();
+                        updateSelectedDisplay();
+                        if (selectedGuild) {
+                            renderChannels(selectedGuild);
+                        }
+                        guilds.forEach(g => updateServerCount(g.id));
+                        updateSendButton();
+                    };
                 } else {
                     selectedChannelsTags.innerHTML = '<div class="no-selection">No channels selected</div>';
+                    const clearAllBtn = document.getElementById('clear-all-btn');
+                    clearAllBtn.style.display = 'none';
                 }
             }
             
@@ -334,6 +540,7 @@
                     if (charCount) {
                         charCount.textContent = this.value.length;
                     }
+                    saveMessageText();
                     updateSendButton();
                 });
             }
@@ -342,10 +549,18 @@
             if (sendBtn) {
                 sendBtn.addEventListener('click', async function() {
                     if (selectedChannels.length > 0 && messageInput && messageInput.value.trim()) {
+                        // Create confirmation message
+                        let confirmMsg = `You are about to send a message to ${selectedChannels.length} channel(s):\n${selectedChannels.map(ch => `• #${ch.name} (${ch.guildName})`).join('\n')}\n\nDo you want to proceed?`;
+
+                        // Show confirmation prompt
+                        if (!confirm(confirmMsg)) {
+                            return; // User cancelled
+                        }
+
                         sendBtn.disabled = true;
                         const originalText = sendBtn.innerHTML;
-                        sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6" opacity="0.3"></circle></svg> Sending...';
-                        
+                        sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinner"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M12 2 A10 10 0 0 1 22 12" stroke-linecap="round"></path></svg> Sending...';
+
                         try {
                             const response = await fetch('/api/send-message', {
                                 method: 'POST',
@@ -357,28 +572,27 @@
                                     message: messageInput.value
                                 })
                             });
-                            
+
+                            if (!response.ok) {
+                                handleSessionError(response);
+                                sendBtn.disabled = false;
+                                sendBtn.innerHTML = originalText;
+                                return;
+                            }
+
                             const result = await response.json();
-                            
+
                             if (response.ok) {
                                 // Show success message
                                 let successMsg = `✅ Message sent to ${result.success.length} channel(s):\n${result.success.map(ch => `• #${ch}`).join('\n')}`;
-                                
+
                                 if (result.failed.length > 0) {
                                     successMsg += `\n\n⚠️ Failed (${result.failed.length}):\n${result.failed.map(ch => `• ${ch}`).join('\n')}`;
                                 }
-                                
+
                                 alert(successMsg);
-                                
-                                // Clear message input and reset selections
-                                messageInput.value = '';
-                                charCount.textContent = '0';
-                                selectedChannels = [];
-                                updateSelectedDisplay();
-                                if (selectedGuild) {
-                                    renderChannels(selectedGuild);
-                                }
-                                guilds.forEach(g => updateServerCount(g.id));
+
+                                // Keep message input - don't clear
                             } else {
                                 alert(`❌ Error: ${result.error}`);
                             }

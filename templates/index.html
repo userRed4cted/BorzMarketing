@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discord Panel - Login</title>
+    <title>Log In</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
         * {
@@ -19,41 +19,12 @@
 
         body {
             font-family: 'Roboto', sans-serif;
-            background: linear-gradient(135deg, #121215 0%, #0a0a0c 100%);
-            color: #F7F7F8;
+            background: #121215;
+            color: #ffffff;
             overflow-x: hidden;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-        }
-
-        /* Navbar */
-        .navbar {
-            display: flex;
-            align-items: center;
-            width: 100%;
-            padding: 1.5rem 2rem;
-            background: #191A1F;
-            border-bottom: 3px solid #335FFF;
-            box-shadow: 0 4px 12px rgba(51, 95, 255, 0.15);
-            z-index: 100;
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            font-size: 1.5rem;
-            font-weight: 900;
-            color: #335FFF;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .logo svg {
-            width: 40px;
-            height: 40px;
-            color: #335FFF;
         }
 
         /* Login Container */
@@ -69,29 +40,21 @@
         /* Token Form */
         .token-form {
             width: 100%;
-            max-width: 500px;
-            padding: 3rem;
+            max-width: 420px;
+            padding: 2.5rem;
             background: #191A1F;
-            border: 3px solid #335FFF;
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(51, 95, 255, 0.2);
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
         }
 
         .form-title {
-            font-size: 2rem;
-            font-weight: 900;
-            color: #F7F7F8;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 1rem;
-            text-align: center;
-        }
-
-        .form-subtitle {
-            font-size: 0.95rem;
-            color: #949ba4;
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #ffffff;
             text-align: center;
             margin-bottom: 2rem;
+            letter-spacing: 0px;
         }
 
         .form-group-login {
@@ -103,114 +66,94 @@
 
         .token-input {
             padding: 1rem;
-            background: #121215;
-            border: 2px solid #335FFF;
+            background: #212227;
+            border: 1px solid transparent;
             border-radius: 8px;
-            color: #F7F7F8;
+            color: #ffffff;
             font-size: 1rem;
             font-family: 'Roboto', sans-serif;
-            font-weight: 500;
+            font-weight: 400;
             transition: all 0.3s ease;
         }
 
         .token-input:focus {
             outline: none;
-            border-color: #4575FF;
-            background: #0a0a0c;
-            box-shadow: 0 0 20px rgba(51, 95, 255, 0.4);
+            background: #212227;
+            border-color: #335FFF;
+            box-shadow: 0 0 10px rgba(51, 95, 255, 0.3);
         }
 
         .token-input::placeholder {
-            color: #6B7280;
+            color: #72767d;
         }
 
         .submit-btn {
-            padding: 1.2rem 2rem;
+            padding: 1rem 2rem;
             background: #335FFF;
             border: none;
             border-radius: 8px;
-            color: #FFFFFF;
-            font-weight: 900;
-            font-size: 1.1rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(51, 95, 255, 0.3);
             width: 100%;
         }
 
         .submit-btn:hover {
             background: #4575FF;
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(51, 95, 255, 0.5);
         }
 
         .submit-btn:active {
             transform: translateY(0);
         }
 
-        .token-help {
-            font-size: 0.85rem;
-            color: #949ba4;
-            margin-top: 1.5rem;
-            line-height: 1.6;
-            text-align: center;
-        }
-
-        .token-help code {
-            background: #121215;
-            padding: 0.4rem 0.8rem;
-            border-radius: 6px;
-            color: #335FFF;
-            font-family: 'Courier New', monospace;
-            font-weight: 600;
-            border: 1px solid #335FFF;
-            display: inline-block;
-            margin: 0.5rem 0;
-        }
-
         .error-message {
-            background: rgba(237, 66, 69, 0.15);
-            border: 2px solid #ed4245;
-            color: #ff6b6b;
+            background: rgba(200, 100, 100, 0.15);
+            border: 1px solid #cc6666;
+            color: #ff9999;
             padding: 1rem;
             border-radius: 8px;
             font-size: 0.95rem;
-            font-weight: 500;
+            font-weight: 400;
             margin-top: 1rem;
             text-align: center;
         }
 
+        .help-btn {
+            background: none;
+            border: none;
+            color: #72767d;
+            font-size: 0.9rem;
+            font-weight: 400;
+            cursor: pointer;
+            margin-top: 1rem;
+            width: 100%;
+            text-align: center;
+            padding: 0.5rem;
+            transition: color 0.3s ease;
+        }
+
+        .help-btn:hover {
+            color: #335FFF;
+            text-decoration: underline;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
-            .navbar {
-                padding: 1rem 1.5rem;
-            }
-
-            .logo {
-                font-size: 1.2rem;
-                gap: 0.75rem;
-            }
-
-            .logo svg {
-                width: 32px;
-                height: 32px;
-            }
-
             .login-container {
                 padding: 1rem;
             }
 
             .token-form {
                 padding: 2rem;
-                border-width: 2px;
                 max-width: 95%;
             }
 
             .form-title {
                 font-size: 1.5rem;
-                letter-spacing: 1px;
             }
 
             .token-input,
@@ -221,35 +164,46 @@
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="logo">
-            <svg width="40" height="40" viewBox="0 0 245 240" fill="currentColor">
-                <path d="M104.14 0C46.97 0 0 46.97 0 104.14v131.72c0 57.165 46.97 104.14 104.14 104.14h131.72c57.165 0 104.14-46.97 104.14-104.14V104.14C340.04 46.97 293.07 0 235.86 0H104.14z"/>
-            </svg>
-            <span>Discord Panel</span>
-        </div>
-    </nav>
-
     <div class="login-container">
         <div class="token-form">
-            <h2 class="form-title">Login</h2>
-            <p class="form-subtitle">Enter your Discord user token to continue</p>
+            <h2 class="form-title">Log In</h2>
             
             <form method="POST" action="{{ url_for('login') }}">
                 <div class="form-group-login">
-                    <input type="password" name="user_token" class="token-input" placeholder="Paste your Discord User Token here" required>
-                    <button type="submit" class="submit-btn">Login</button>
+                    <input type="password" name="user_token" class="token-input" placeholder="Insert Discord User Token" required>
+                    <button type="submit" class="submit-btn">Log In</button>
                 </div>
                 {% if error %}
                     <div class="error-message">{{ error }}</div>
                 {% endif %}
             </form>
-            
-            <p class="token-help">
-                📝 Get your user token:<br>
-                Press <code>F12</code> → <code>Console</code> → <code>window.localStorage.token</code>
-            </p>
+
+            <button type="button" class="help-btn" onclick="showTokenHelp()">Need help obtaining your token?</button>
+            <button type="button" class="help-btn" onclick="showTokenInfo()">Why do we use your token?</button>
         </div>
     </div>
+
+    <script>
+        function showTokenHelp() {
+            alert('How to obtain your Discord token:\n\n' +
+                  '1. Open Discord in your browser (discord.com)\n' +
+                  '2. Press F12 to open Developer Tools\n' +
+                  '3. Go to the "Application" tab (Chrome) or "Storage" tab (Firefox)\n' +
+                  '4. In the left sidebar, expand "Local Storage"\n' +
+                  '5. Click on the Discord domain\n' +
+                  '6. Find the "token" key in the list\n' +
+                  '7. Copy the value (your token) - make sure to exclude the "" at the start and end');
+        }
+
+        function showTokenInfo() {
+            alert('Why do we use your token?\n\n' +
+                  'Your token is NOT stored on our servers.\n\n' +
+                  'The token is only used to:\n' +
+                  '• Send messages on your behalf to selected channels\n' +
+                  '• Read the servers you are in\n' +
+                  '• Access the channels within those servers\n\n' +
+                  'Your token remains in your browser session and is deleted when you log out.');
+        }
+    </script>
 </body>
 </html>
