@@ -2,6 +2,7 @@ from flask import Flask, render_template, redirect, url_for, session, request
 import os
 from dotenv import load_dotenv
 import requests
+from datetime import timedelta
 
 load_dotenv()
 
@@ -11,11 +12,22 @@ app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')
 # Session security configuration
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour session timeout
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)  # 30 days session
+app.config['SESSION_PERMANENT'] = True
+
+# Helper function to get client IP
+def get_client_ip():
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0]
+    return request.remote_addr
 
 @app.route('/')
 def root():
-    return redirect(url_for('login_page'))
+    return redirect(url_for('home'))
+
+@app.route('/home')
+def home():
+    return render_template('home.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():
@@ -42,18 +54,37 @@ def login_page():
         return render_template('index.html', error='Invalid user token'), 401
 
     user_data = resp.json()
+    client_ip = get_client_ip()
+
+    # Check if IP has changed (for security)
+    if 'login_ip' in session and session['login_ip'] != client_ip:
+        # IP changed - clear old session and create new one
+        session.clear()
+
+    # Store session data
+    session.permanent = True
     session['user_token'] = user_token
     session['user'] = user_data
+    session['login_ip'] = client_ip
 
     # Initialize sent_count if not exists
     if 'sent_count' not in session:
         session['sent_count'] = 0
+
+    # Log the login (you can store this in a database later)
+    print(f"[LOGIN] User: {user_data.get('username')} (ID: {user_data.get('id')}) | IP: {client_ip}")
 
     return redirect(url_for('panel'))
 
 @app.route('/panel')
 def panel():
     if 'user_token' not in session:
+        return redirect(url_for('login_page'))
+
+    # Check if IP has changed
+    client_ip = get_client_ip()
+    if 'login_ip' in session and session['login_ip'] != client_ip:
+        session.clear()
         return redirect(url_for('login_page'))
 
     user_token = session.get('user_token')
@@ -219,6 +250,12 @@ def send_message():
 @app.route('/settings')
 def settings():
     if 'user_token' not in session:
+        return redirect(url_for('login_page'))
+
+    # Check if IP has changed
+    client_ip = get_client_ip()
+    if 'login_ip' in session and session['login_ip'] != client_ip:
+        session.clear()
         return redirect(url_for('login_page'))
 
     sent_count = session.get('sent_count', 0)

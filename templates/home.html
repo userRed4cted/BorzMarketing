@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Borz Marketing Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="panel">
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-left">
+                    <div class="menu-icon" id="menu-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </div>
+                    <div class="navbar-text">
+                        <h1 class="navbar-title">Borz Marketing Panel</h1>
+                        <p class="navbar-subtitle">Welcome to your marketing automation hub</p>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    {% if session.get('user') %}
+                        <div class="user-info">
+                            {% if session['user'].avatar %}
+                                <img src="https://cdn.discordapp.com/avatars/{{ session['user'].id }}/{{ session['user'].avatar }}.png" alt="{{ session['user'].username }}" class="user-avatar">
+                            {% else %}
+                                <div class="user-avatar-placeholder">{{ session['user'].username[0].upper() }}</div>
+                            {% endif %}
+                            <div class="user-details">
+                                <div class="username">{{ session['user'].username }}</div>
+                                <div class="user-id">{{ session['user'].id }}</div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <a href="{{ url_for('login_page') }}" class="login-btn-nav">Log In</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Dropdown Menu -->
+            <div class="dropdown-menu" id="dropdown-menu">
+                <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
+                <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
+                <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
+                <div class="dropdown-divider"></div>
+                <a href="{{ url_for('logout') }}" class="dropdown-item logout-item">Logout</a>
+            </div>
+        </nav>
+
+        <div class="panel-container">
+            <div class="home-content">
+                <!-- Home page content will go here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dropdown menu toggle
+        const menuIcon = document.getElementById('menu-icon');
+        const dropdownMenu = document.getElementById('dropdown-menu');
+
+        if (menuIcon) {
+            menuIcon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdownMenu.classList.toggle('show');
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!dropdownMenu.contains(e.target) && !menuIcon.contains(e.target)) {
+                dropdownMenu.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>

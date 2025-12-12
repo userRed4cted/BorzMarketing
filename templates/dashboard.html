@@ -10,12 +10,21 @@
     <div class="panel">
         <nav class="navbar">
             <div class="navbar-content">
-                <div class="navbar-text">
-                    <h1 class="navbar-title">Borz Marketing Panel</h1>
-                    <p class="navbar-subtitle">Select in which servers and channels you would like to automate your marketing</p>
+                <div class="navbar-left">
+                    <div class="menu-icon" id="menu-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </div>
+                    <div class="navbar-text">
+                        <h1 class="navbar-title">Borz Marketing Panel</h1>
+                        <p class="navbar-subtitle">Select in which servers and channels you would like to automate your marketing</p>
+                    </div>
                 </div>
                 <div class="nav-right">
-                    <div class="user-info" id="user-info-btn">
+                    <div class="user-info">
                         {% if user.avatar %}
                             <img src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" alt="{{ user.username }}" class="user-avatar">
                         {% else %}
@@ -27,6 +36,15 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Dropdown Menu -->
+            <div class="dropdown-menu" id="dropdown-menu">
+                <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
+                <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
+                <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
+                <div class="dropdown-divider"></div>
+                <a href="{{ url_for('logout') }}" class="dropdown-item logout-item">Logout</a>
             </div>
         </nav>
 
@@ -169,35 +187,23 @@
                 }
             });
 
-            // Prevent spam clicking on profile button
-            const userInfoBtn = document.getElementById('user-info-btn');
-            let isNavigating = false;
+            // Dropdown menu toggle
+            const menuIcon = document.getElementById('menu-icon');
+            const dropdownMenu = document.getElementById('dropdown-menu');
 
-            if (userInfoBtn) {
-                userInfoBtn.addEventListener('click', () => {
-                    if (isSending) {
-                        // Show confirmation dialog with options
-                        const userChoice = confirm('⚠️ Messages are currently being sent.\n\nNavigating away will stop the sending process.\n\nPress OK to stop sending and go to settings, or Cancel to continue sending.');
-
-                        if (userChoice) {
-                            // User chose to stop sending and navigate
-                            isSending = false;
-                            isNavigating = true;
-                            userInfoBtn.style.opacity = '0.5';
-                            userInfoBtn.style.pointerEvents = 'none';
-                            window.location.href = '{{ url_for("settings") }}';
-                        }
-                        // If user cancels, do nothing - continue sending
-                        return;
-                    }
-                    if (!isNavigating) {
-                        isNavigating = true;
-                        userInfoBtn.style.opacity = '0.5';
-                        userInfoBtn.style.pointerEvents = 'none';
-                        window.location.href = '{{ url_for("settings") }}';
-                    }
+            if (menuIcon) {
+                menuIcon.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    dropdownMenu.classList.toggle('show');
                 });
             }
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (dropdownMenu && !dropdownMenu.contains(e.target) && menuIcon && !menuIcon.contains(e.target)) {
+                    dropdownMenu.classList.remove('show');
+                }
+            });
 
             // Load saved data from localStorage (persists across sessions)
             function loadSelectedChannels() {
