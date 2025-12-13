@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Borz Marketing Panel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='tab_enforcement.js') }}"></script>
 </head>
 <body>
     <div class="panel">
@@ -41,15 +42,20 @@
             <!-- Dropdown Menu -->
             <div class="dropdown-menu" id="dropdown-menu">
                 <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
-                <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
+                <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
+                {% if plan_status and plan_status.has_plan %}
+                    <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
+                {% endif %}
                 <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
                 <div class="dropdown-divider"></div>
+                <a href="https://discord.gg/KWt6rvCukp" target="_blank" class="dropdown-item discord-item">Discord Server</a>
                 <a href="{{ url_for('logout') }}" class="dropdown-item logout-item">Logout</a>
             </div>
         </nav>
 
         <div class="panel-container">
             <div class="settings-container">
+                <div class="support-notice">For account or general support join our Discord server, found in the drop down menu</div>
                 <div class="settings-panels">
                     <!-- Usage Panel -->
                     <div class="settings-panel">
@@ -57,7 +63,15 @@
                         <div class="settings-panel-content">
                             <div class="usage-stat">
                                 <div class="usage-label">Allowance</div>
-                                <div class="usage-value">inf</div>
+                                <div class="usage-value">
+                                    {% if plan_status.is_unlimited %}
+                                        inf
+                                    {% elif plan_status.has_plan %}
+                                        {{ plan_status.messages_remaining }}
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </div>
                             </div>
                             <div class="usage-stat">
                                 <div class="usage-label">Advertisements Sent</div>
@@ -65,36 +79,57 @@
                             </div>
                             <div class="usage-stat">
                                 <div class="usage-label">Usage Percentage</div>
-                                <div class="usage-value">0%</div>
+                                <div class="usage-value">
+                                    {% if plan_status.is_unlimited %}
+                                        0%
+                                    {% elif plan_status.has_plan and plan_status.message_limit > 0 %}
+                                        {{ ((plan_status.messages_sent / plan_status.message_limit) * 100)|round(0)|int }}%
+                                    {% else %}
+                                        0%
+                                    {% endif %}
+                                </div>
+                                <div class="usage-progress-bar">
+                                    <div class="usage-progress-fill" style="width: {% if plan_status.is_unlimited %}0{% elif plan_status.has_plan and plan_status.message_limit > 0 %}{{ ((plan_status.messages_sent / plan_status.message_limit) * 100)|round(0)|int }}{% else %}0{% endif %}%;"></div>
+                                </div>
                             </div>
+                            {% if plan_status.has_plan and plan_status.usage_type == 'allowance' and plan_status.next_reset %}
+                            <div class="usage-stat">
+                                <div class="usage-label">Limit Resets In</div>
+                                <div class="usage-value" id="resetCountdown" data-reset-time="{{ plan_status.next_reset }}">Calculating...</div>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
 
                     <!-- General Settings Panel -->
                     <div class="settings-panel">
                         <div class="settings-panel-header">General Settings</div>
-                        <div class="settings-panel-content">
+                        <div class="settings-panel-content" style="display: flex; flex-direction: column; flex: 1;">
                             <div class="setting-group">
                                 <div class="setting-label">Message Send Delay</div>
                                 <div class="setting-description">Delay between each message send (improves users discord performance)</div>
                                 <div class="delay-options">
                                     <label class="delay-option">
-                                        <input type="radio" name="messageDelay" value="0" class="delay-radio">
+                                        <input type="radio" name="messageDelay" value="0" class="delay-radio" {% if not plan_status.has_plan %}disabled{% endif %}>
                                         <span class="delay-option-label">No Delay</span>
                                     </label>
                                     <label class="delay-option">
-                                        <input type="radio" name="messageDelay" value="1000" class="delay-radio" checked>
+                                        <input type="radio" name="messageDelay" value="1000" class="delay-radio" checked {% if not plan_status.has_plan %}disabled{% endif %}>
                                         <span class="delay-option-label">1 Second</span>
                                     </label>
                                     <label class="delay-option">
-                                        <input type="radio" name="messageDelay" value="2000" class="delay-radio">
+                                        <input type="radio" name="messageDelay" value="2000" class="delay-radio" {% if not plan_status.has_plan %}disabled{% endif %}>
                                         <span class="delay-option-label">2 Seconds</span>
                                     </label>
                                     <label class="delay-option">
-                                        <input type="radio" name="messageDelay" value="5000" class="delay-radio">
+                                        <input type="radio" name="messageDelay" value="5000" class="delay-radio" {% if not plan_status.has_plan %}disabled{% endif %}>
                                         <span class="delay-option-label">5 Seconds</span>
                                     </label>
                                 </div>
+                            </div>
+
+                            <div class="setting-group" style="margin-top: auto;">
+                                <button class="delete-account-btn" id="deleteAccountBtn">Delete Account</button>
                             </div>
                         </div>
                     </div>
@@ -102,13 +137,85 @@
                     <!-- Billing Panel -->
                     <div class="settings-panel">
                         <div class="settings-panel-header">Billing</div>
-                        <div class="settings-panel-content">
-                            <div class="coming-soon">Coming soon</div>
+                        <div class="settings-panel-content" style="display: flex; flex-direction: column; flex: 1;">
+                            {% if plan_status.has_plan %}
+                                <div>
+                                    <!-- Status at top -->
+                                    <div class="usage-stat">
+                                        <div class="usage-label">Status</div>
+                                        <div class="usage-value" style="color: #4caf50;">Active</div>
+                                    </div>
+
+                                    <!-- Current Plan -->
+                                    <div class="usage-stat">
+                                        <div class="usage-label">Current Plan</div>
+                                        <div class="usage-value">{{ plan_status.plan_name }}</div>
+                                    </div>
+
+                                    <!-- Billing Period (only for subscriptions) -->
+                                    {% if plan_status.plan_type == 'subscription' %}
+                                        <div class="usage-stat">
+                                            <div class="usage-label">Billing Period</div>
+                                            <div class="usage-value">{{ plan_status.billing_period|capitalize }}</div>
+                                        </div>
+                                    {% endif %}
+
+                                    <!-- Plan Started -->
+                                    <div class="usage-stat">
+                                        <div class="usage-label">Plan Started</div>
+                                        <div class="usage-value">{{ plan_status.started_at[:10] }}</div>
+                                    </div>
+
+                                    <!-- Next Billing Date or Plan Expires -->
+                                    {% if plan_status.expires_at %}
+                                        <div class="usage-stat">
+                                            <div class="usage-label">{% if plan_status.plan_type == 'subscription' %}Next Billing Date{% else %}Plan Expires{% endif %}</div>
+                                            <div class="usage-value">{{ plan_status.expires_at[:10] }}</div>
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="setting-group" style="margin-top: auto;">
+                                    <button class="delete-account-btn" id="cancelPlanBtn">
+                                        Cancel Plan
+                                    </button>
+                                </div>
+                            {% else %}
+                                <div>
+                                    <!-- Status -->
+                                    <div class="usage-stat">
+                                        <div class="usage-label">Status</div>
+                                        <div class="usage-value" style="color: #ff6b6b;">No Active Plan</div>
+                                    </div>
+
+                                    <!-- Current Plan -->
+                                    <div class="usage-stat">
+                                        <div class="usage-label">Current Plan</div>
+                                        <div class="usage-value">Nil</div>
+                                    </div>
+
+                                    <!-- Plan Started -->
+                                    <div class="usage-stat">
+                                        <div class="usage-label">Plan Started</div>
+                                        <div class="usage-value">Nil</div>
+                                    </div>
+
+                                    <!-- Plan Expires -->
+                                    <div class="usage-stat">
+                                        <div class="usage-label">Plan Expires</div>
+                                        <div class="usage-value">Nil</div>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group" style="margin-top: auto;">
+                                    <button class="delete-account-btn" id="cancelPlanBtnDisabled" style="opacity: 0.5; cursor: not-allowed;" disabled>
+                                        Cancel Plan
+                                    </button>
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
-
-                <div class="coming-soon">Coming soon</div>
             </div>
         </div>
     </div>
@@ -136,8 +243,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             const delayRadios = document.querySelectorAll('.delay-radio');
 
-            // Load saved delay setting from localStorage (default to 1000ms)
-            const savedDelay = localStorage.getItem('messageDelay') || '1000';
+            // Load saved delay setting from server (default to 1000ms)
+            const savedDelay = '{{ user_data.message_delay }}' || '1000';
 
             // Set the correct radio button as checked
             delayRadios.forEach(radio => {
@@ -145,14 +252,188 @@
                     radio.checked = true;
                 }
 
-                // Add change listener to save when user selects a new option
+                // Add change listener to save to database when user selects a new option
                 radio.addEventListener('change', () => {
                     if (radio.checked) {
-                        localStorage.setItem('messageDelay', radio.value);
+                        // Save to database
+                        fetch('/api/save-user-data', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                message_delay: parseInt(radio.value)
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (!data.success) {
+                                console.error('Failed to save delay setting:', data.error);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error saving delay setting:', error);
+                        });
                     }
                 });
             });
+
+            // Countdown timer functionality
+            const countdownElement = document.getElementById('resetCountdown');
+            if (countdownElement) {
+                const resetTime = countdownElement.getAttribute('data-reset-time');
+
+                function updateCountdown() {
+                    const now = new Date();
+                    const reset = new Date(resetTime);
+                    const diff = reset - now;
+
+                    if (diff <= 0) {
+                        countdownElement.textContent = 'Resetting...';
+                        return;
+                    }
+
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+                    countdownElement.textContent = `${hours}h ${minutes}m`;
+                }
+
+                // Update immediately and then every minute
+                updateCountdown();
+                setInterval(updateCountdown, 60000);
+            }
+
+            // Delete account functionality with persistent confirmation
+            const deleteAccountBtn = document.getElementById('deleteAccountBtn');
+            let deleteAccountConfirmed = false;
+
+            if (deleteAccountBtn) {
+                const originalDeleteText = deleteAccountBtn.textContent;
+                const originalDeleteStyle = deleteAccountBtn.style.cssText;
+
+                deleteAccountBtn.addEventListener('click', () => {
+                    if (!deleteAccountConfirmed) {
+                        // First click - show confirmation
+                        const confirmation = confirm('Account and related data will be erased, this action is irreversible. Any active plan will be terminated without refund.');
+
+                        if (confirmation) {
+                            deleteAccountConfirmed = true;
+                            deleteAccountBtn.textContent = 'Confirm Delete';
+                            deleteAccountBtn.style.background = '#c0392b';
+                            deleteAccountBtn.style.border = '2px solid #e74c3c';
+                        }
+                    } else {
+                        // Second click - execute deletion
+                        deleteAccountBtn.textContent = 'Deleting...';
+                        deleteAccountBtn.disabled = true;
+
+                        fetch('/api/delete-account', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                localStorage.clear();
+                                alert('Your account has been successfully deleted.');
+                                window.location.href = '/home';
+                            } else {
+                                alert('Error deleting account: ' + (data.error || 'Unknown error'));
+                                deleteAccountBtn.disabled = false;
+                                deleteAccountBtn.textContent = originalDeleteText;
+                                deleteAccountBtn.style.cssText = originalDeleteStyle;
+                                deleteAccountConfirmed = false;
+                            }
+                        })
+                        .catch(error => {
+                            alert('Error deleting account: ' + error);
+                            deleteAccountBtn.disabled = false;
+                            deleteAccountBtn.textContent = originalDeleteText;
+                            deleteAccountBtn.style.cssText = originalDeleteStyle;
+                            deleteAccountConfirmed = false;
+                        });
+                    }
+                });
+
+                // Reset confirmation state when navigating
+                window.addEventListener('beforeunload', () => {
+                    deleteAccountConfirmed = false;
+                });
+            }
         });
+
+        // Cancel plan functionality with persistent confirmation
+        const cancelPlanBtn = document.getElementById('cancelPlanBtn');
+        let cancelPlanConfirmed = false;
+
+        if (cancelPlanBtn) {
+            {% if plan_status.has_plan %}
+                const originalCancelText = cancelPlanBtn.textContent;
+                const originalCancelStyle = cancelPlanBtn.style.cssText;
+                const planType = '{{ plan_status.plan_type }}';
+                const expiresAt = '{{ plan_status.expires_at[:10] if plan_status.expires_at else "" }}';
+
+                cancelPlanBtn.addEventListener('click', () => {
+                    if (!cancelPlanConfirmed) {
+                        // First click - show confirmation
+                        let message = 'Are you sure you want to cancel your plan? Current plan will remain active until ';
+                        if (planType === 'subscription') {
+                            message += expiresAt;
+                        } else {
+                            message += expiresAt;
+                        }
+
+                        const confirmation = confirm(message);
+
+                        if (confirmation) {
+                            cancelPlanConfirmed = true;
+                            cancelPlanBtn.textContent = 'Confirm Cancel';
+                            cancelPlanBtn.style.background = '#c0392b';
+                            cancelPlanBtn.style.border = '2px solid #e74c3c';
+                        }
+                    } else {
+                        // Second click - execute cancellation
+                        cancelPlanBtn.textContent = 'Cancelling...';
+                        cancelPlanBtn.disabled = true;
+
+                        fetch('/api/cancel-plan', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert('Your plan has been successfully cancelled.');
+                                window.location.reload();
+                            } else {
+                                alert('Error cancelling plan: ' + (data.error || 'Unknown error'));
+                                cancelPlanBtn.disabled = false;
+                                cancelPlanBtn.textContent = originalCancelText;
+                                cancelPlanBtn.style.cssText = originalCancelStyle;
+                                cancelPlanConfirmed = false;
+                            }
+                        })
+                        .catch(error => {
+                            alert('Error cancelling plan: ' + error);
+                            cancelPlanBtn.disabled = false;
+                            cancelPlanBtn.textContent = originalCancelText;
+                            cancelPlanBtn.style.cssText = originalCancelStyle;
+                            cancelPlanConfirmed = false;
+                        });
+                    }
+                });
+
+                // Reset confirmation state when navigating
+                window.addEventListener('beforeunload', () => {
+                    cancelPlanConfirmed = false;
+                });
+            {% endif %}
+        }
     </script>
 </body>
 </html>

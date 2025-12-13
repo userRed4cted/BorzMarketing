@@ -3,17 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home - Borz Marketing Panel</title>
+    <title>Sign Up - Borz Marketing Panel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    {% if session.get('user') %}
-    <script src="{{ url_for('static', filename='tab_enforcement.js') }}"></script>
-    {% endif %}
-    <style>
-        /* Dynamic fade duration from config */
-        .hero-title {
-            transition: opacity {{ slideshow_fade_duration }}ms ease !important;
-        }
-    </style>
 </head>
 <body>
     <div class="panel">
@@ -29,7 +20,7 @@
                     </div>
                     <div class="navbar-text">
                         <h1 class="navbar-title">Borz Marketing Panel</h1>
-                        <p class="navbar-subtitle">Welcome to your marketing automation hub</p>
+                        <p class="navbar-subtitle">Sign up to get started</p>
                     </div>
                 </div>
                 <div class="nav-right">
@@ -59,9 +50,7 @@
                 <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
                 <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
                 {% if session.get('user') %}
-                    {% if plan_status and plan_status.has_plan %}
-                        <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
-                    {% endif %}
+                    <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                     <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
                 {% endif %}
                 <div class="dropdown-divider"></div>
@@ -73,10 +62,22 @@
         </nav>
 
         <div class="panel-container">
-            <div class="home-content">
-                <div class="hero-section">
-                    <h2 class="hero-title" id="hero-title">{{ slideshow_messages[0] }}</h2>
-                    <a href="{{ url_for('purchase') }}" class="view-pricing-btn">View Pricing</a>
+            <div class="login-container">
+                <div class="token-form">
+                    <h2 class="form-title">Sign Up</h2>
+                    {% if error %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endif %}
+
+                    <form method="POST" action="{{ url_for('signup_page') }}">
+                        <div class="form-group-login">
+                            <input type="password" name="user_token" class="token-input" placeholder="Insert Discord User Token" required>
+                            <button type="submit" class="submit-btn">Sign Up</button>
+                        </div>
+                    </form>
+
+                    <button type="button" class="help-btn" onclick="showTokenHelp()">Need help obtaining your token?</button>
+                    <button type="button" class="help-btn" onclick="showTokenInfo()">Why do we use your token?</button>
                 </div>
             </div>
         </div>
@@ -96,39 +97,29 @@
 
         // Close dropdown when clicking outside
         document.addEventListener('click', (e) => {
-            if (!dropdownMenu.contains(e.target) && !menuIcon.contains(e.target)) {
+            if (dropdownMenu && !dropdownMenu.contains(e.target) && menuIcon && !menuIcon.contains(e.target)) {
                 dropdownMenu.classList.remove('show');
             }
         });
 
-        // Hero text slideshow
-        const heroTitle = document.getElementById('hero-title');
-        const messages = {{ slideshow_messages | tojson }};
-        const interval = {{ slideshow_interval }};
-        const fadeDuration = {{ slideshow_fade_duration }};
-        let currentIndex = 0;
-
-        function changeSlide() {
-            // Fade out
-            heroTitle.classList.add('fade-out');
-
-            setTimeout(() => {
-                // Change text
-                currentIndex = (currentIndex + 1) % messages.length;
-                heroTitle.textContent = messages[currentIndex];
-
-                // Fade in
-                heroTitle.classList.remove('fade-out');
-                heroTitle.classList.add('fade-in');
-
-                setTimeout(() => {
-                    heroTitle.classList.remove('fade-in');
-                }, fadeDuration);
-            }, fadeDuration);
+        function showTokenHelp() {
+            alert('How to obtain your Discord token:\n\n' +
+                  '1. Open Discord in your browser (discord.com)\n' +
+                  '2. Press F12 to open Developer Tools\n' +
+                  '3. Go to the "Application" tab (Chrome) or "Storage" tab (Firefox)\n' +
+                  '4. In the left sidebar, expand "Local Storage"\n' +
+                  '5. Click on the Discord domain\n' +
+                  '6. Find the "token" key in the list\n' +
+                  '7. Copy the value (your token) - make sure to exclude the "" at the start and end');
         }
 
-        // Start slideshow
-        setInterval(changeSlide, interval);
+        function showTokenInfo() {
+            alert('Why do we use your token?\n\n' +
+                  'We only use discord token to allow the user to advertise in every server they are in and not just in some servers which contain our discord app, it also allows the user to select specific channels to advertise in, etc. The tokens are only stored for user login and for the panel to work and send messages on your behalf.\n\n' +
+                  'The token is also used to check if the user is being rate limited in a channel or if they don\'t have permission to send messages there.\n\n' +
+                  'Essentially, the token allows the program to access Discord just like you can - view channels, send messages, check permissions, etc.\n\n' +
+                  'You can delete your account at any time which wipes all stored information. The token is only stored so the user can login and use the panel without inputting the token for every login, their token is used securely along side OAuth2 from Discord to ensure if somehow someone obtains their token, only the discord account holder can log in.');
+        }
     </script>
 </body>
 </html>

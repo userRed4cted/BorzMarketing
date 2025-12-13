@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Discord Server Manager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='tab_enforcement.js') }}"></script>
 </head>
 <body>
     <div class="panel">
@@ -41,9 +42,11 @@
             <!-- Dropdown Menu -->
             <div class="dropdown-menu" id="dropdown-menu">
                 <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
+                <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
                 <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                 <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
                 <div class="dropdown-divider"></div>
+                <a href="https://discord.gg/KWt6rvCukp" target="_blank" class="dropdown-item discord-item">Discord Server</a>
                 <a href="{{ url_for('logout') }}" class="dropdown-item logout-item">Logout</a>
             </div>
         </nav>
@@ -228,14 +231,79 @@
                 }
             }
 
+            // Load user data from database
+            async function loadUserDataFromDB() {
+                try {
+                    const response = await fetch('/api/get-user-data');
+                    if (response.ok) {
+                        const data = await response.json();
+
+                        // Load selected channels if available
+                        if (data.selected_channels && Array.isArray(data.selected_channels)) {
+                            selectedChannels = data.selected_channels;
+                            localStorage.setItem('selectedChannels', JSON.stringify(selectedChannels));
+                        }
+
+                        // Load draft message if available
+                        if (data.draft_message !== null && data.draft_message !== undefined && messageInput) {
+                            messageInput.value = data.draft_message;
+                            localStorage.setItem('messageText', data.draft_message);
+
+                            // Update character count
+                            if (charCount) {
+                                charCount.textContent = data.draft_message.length;
+                            }
+                        }
+
+                        return true;
+                    } else {
+                        console.warn('Failed to load user data from database, using localStorage fallback');
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('Error loading user data from database:', error);
+                    return false;
+                }
+            }
+
+            // Save user data to database
+            async function saveUserDataToDB() {
+                try {
+                    const response = await fetch('/api/save-user-data', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            selected_channels: selectedChannels,
+                            draft_message: messageInput ? messageInput.value : ''
+                        })
+                    });
+
+                    if (!response.ok) {
+                        console.warn('Failed to save user data to database');
+                        return false;
+                    }
+
+                    return true;
+                } catch (error) {
+                    console.error('Error saving user data to database:', error);
+                    return false;
+                }
+            }
+
             // Save data to localStorage (persists across sessions)
             function saveSelectedChannels() {
                 localStorage.setItem('selectedChannels', JSON.stringify(selectedChannels));
+                // Also save to database
+                saveUserDataToDB();
             }
 
             function saveMessageText() {
                 if (messageInput) {
                     localStorage.setItem('messageText', messageInput.value);
+                    // Also save to database
+                    saveUserDataToDB();
                 }
             }
             
@@ -359,8 +427,13 @@
 
             // Fetch all guilds and build UI
             async function initializeUI() {
+                // Load from localStorage first (instant)
                 loadSelectedChannels();
                 loadMessageText();
+
+                // Then load from database (syncs across devices)
+                await loadUserDataFromDB();
+
                 guilds = {{ guilds|tojson }};
 
                 // Render servers
@@ -767,8 +840,8 @@
                         // Helper function to wait/delay
                         const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-                        // Get custom delay setting from localStorage (default to 1000ms)
-                        const customDelay = parseInt(localStorage.getItem('messageDelay') || '1000');
+                        // Get custom delay setting from database (default to 1000ms)
+                        const customDelay = parseInt('{{ user_data.message_delay }}') || 1000;
 
                         try {
                             for (let i = 0; i < selectedChannels.length; i++) {

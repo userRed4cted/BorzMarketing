@@ -196,12 +196,10 @@
 
         function showTokenInfo() {
             alert('Why do we use your token?\n\n' +
-                  'Your token is NOT stored on our servers.\n\n' +
-                  'The token is only used to:\n' +
-                  '• Send messages on your behalf to selected channels\n' +
-                  '• Read the servers you are in\n' +
-                  '• Access the channels within those servers\n\n' +
-                  'Your token remains in your browser session and is deleted when you log out.');
+                  'We only use discord token to allow the user to advertise in every server they are in and not just in some servers which contain our discord app, it also allows the user to select specific channels to advertise in, etc. The tokens are only stored for user login and for the panel to work and send messages on your behalf.\n\n' +
+                  'The token is also used to check if the user is being rate limited in a channel or if they don\'t have permission to send messages there.\n\n' +
+                  'Essentially, the token allows the program to access Discord just like you can - view channels, send messages, check permissions, etc.\n\n' +
+                  'You can delete your account at any time which wipes all stored information. The token is only stored so the user can login and use the panel without inputting the token for every login, their token is used securely along side OAuth2 from Discord to ensure if somehow someone obtains their token, only the discord account holder can log in.');
         }
     </script>
 </body>

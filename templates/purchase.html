@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase - Borz Marketing Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% if session.get('user') %}
+    <script src="{{ url_for('static', filename='tab_enforcement.js') }}"></script>
+    {% endif %}
+</head>
+<body>
+    <div class="panel">
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-left">
+                    <div class="menu-icon" id="menu-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </div>
+                    <div class="navbar-text">
+                        <h1 class="navbar-title">Borz Marketing Panel</h1>
+                        <p class="navbar-subtitle">Choose your plan and start marketing</p>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    {% if session.get('user') %}
+                        <div class="user-info">
+                            {% if session['user'].avatar %}
+                                <img src="https://cdn.discordapp.com/avatars/{{ session['user'].id }}/{{ session['user'].avatar }}.png" alt="{{ session['user'].username }}" class="user-avatar">
+                            {% else %}
+                                <div class="user-avatar-placeholder">{{ session['user'].username[0].upper() }}</div>
+                            {% endif %}
+                            <div class="user-details">
+                                <div class="username">{{ session['user'].username }}</div>
+                                <div class="user-id">{{ session['user'].id }}</div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="auth-buttons">
+                            <a href="{{ url_for('login_page') }}" class="auth-btn login-btn">Login</a>
+                            <a href="{{ url_for('signup_page') }}" class="auth-btn signup-btn">Sign Up</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Dropdown Menu -->
+            <div class="dropdown-menu" id="dropdown-menu">
+                <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
+                <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
+                {% if session.get('user') %}
+                    {% if plan_status and plan_status.has_plan %}
+                        <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
+                    {% endif %}
+                    <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
+                {% endif %}
+                <div class="dropdown-divider"></div>
+                <a href="https://discord.gg/KWt6rvCukp" target="_blank" class="dropdown-item discord-item">Discord Server</a>
+                {% if session.get('user') %}
+                    <a href="{{ url_for('logout') }}" class="dropdown-item logout-item">Logout</a>
+                {% endif %}
+            </div>
+        </nav>
+
+        <div class="panel-container">
+            <div class="purchase-container">
+                <!-- Mode Toggle -->
+                <div class="purchase-mode-toggle">
+                    <button class="mode-btn active" data-mode="subscriptions">Subscriptions</button>
+                    <button class="mode-btn" data-mode="one-time">One Time Purchase</button>
+                </div>
+
+                <!-- Subscriptions Section -->
+                <div class="purchase-section" id="subscriptions-section">
+                    <div class="billing-toggle">
+                        <span class="billing-label">Monthly</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="billingToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="billing-label">Yearly <span class="save-badge">Save 17%</span></span>
+                    </div>
+
+                    <div class="plans-grid">
+                        {% for plan_id, plan in subscription_plans.items() %}
+                        {% set yearly_per_month = (plan.price_yearly / 12) | round(2) %}
+                        {% set yearly_savings = (plan.price_monthly * 12 - plan.price_yearly) | round(2) %}
+                        <div class="plan-card" data-plan-id="{{ plan_id }}" data-glow="{{ plan.glow_color }}">
+                            <div class="plan-header">
+                                <h3 class="plan-name">{{ plan.name }}</h3>
+                                <div class="plan-price-section">
+                                    <div class="price-row monthly-price">
+                                        <span class="price">${{ "%.2f"|format(plan.price_monthly) if plan.price_monthly % 1 != 0 else "%.0f"|format(plan.price_monthly) }}</span>
+                                    </div>
+                                    <div class="price-row yearly-price" style="display: none;">
+                                        <span class="price">${{ "%.2f"|format(plan.price_yearly) if plan.price_yearly % 1 != 0 else "%.0f"|format(plan.price_yearly) }}</span>
+                                    </div>
+                                    <span class="period monthly-period">PER MONTH</span>
+                                    <span class="period yearly-period" style="display: none;">PER YEAR</span>
+                                    <div class="yearly-savings" style="display: none;">
+                                        {% if plan.get('savings_text') %}
+                                            {{ plan.savings_text }}
+                                        {% else %}
+                                            SAVING ${{ "%.0f"|format(yearly_savings) }} ({{ yearly_discount }}% OFF) YEARLY
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="plan-features">
+                                {% for feature in plan.features %}
+                                <div class="feature">
+                                    <svg class="check-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <path d="M16.6667 5L7.50004 14.1667L3.33337 10" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>{{ feature }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <button class="purchase-btn" data-plan-type="subscription" data-plan-id="{{ plan_id }}">
+                                {% if plan_status and plan_status.has_plan %}
+                                    {% if plan_status.plan_id == plan_id and plan_status.plan_type == 'subscription' %}
+                                        Current Plan
+                                    {% else %}
+                                        Change Plan
+                                    {% endif %}
+                                {% else %}
+                                    {{ plan.get('button_text', 'Join with Card') }}
+                                {% endif %}
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- One-Time Purchase Section -->
+                <div class="purchase-section" id="one-time-section" style="display: none;">
+                    <div class="plans-grid">
+                        {% for plan_id, plan in one_time_plans.items() %}
+                        <div class="plan-card" data-plan-id="{{ plan_id }}" data-glow="{{ plan.glow_color }}">
+                            <div class="plan-header">
+                                <h3 class="plan-name">{{ plan.name }}</h3>
+                                <div class="plan-price-section">
+                                    <div class="price-row">
+                                        <span class="price">${{ "%.2f"|format(plan.price) if plan.price % 1 != 0 else "%.0f"|format(plan.price) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="plan-features">
+                                {% for feature in plan.features %}
+                                <div class="feature">
+                                    <svg class="check-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <path d="M16.6667 5L7.50004 14.1667L3.33337 10" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>{{ feature }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <button class="purchase-btn" data-plan-type="one-time" data-plan-id="{{ plan_id }}">
+                                {% if plan_status and plan_status.has_plan %}
+                                    {% if plan_status.plan_id == plan_id and plan_status.plan_type == 'one-time' %}
+                                        Current Plan
+                                    {% else %}
+                                        Change Plan
+                                    {% endif %}
+                                {% else %}
+                                    {{ plan.get('button_text', 'Join with Card') }}
+                                {% endif %}
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dropdown menu toggle
+        const menuIcon = document.getElementById('menu-icon');
+        const dropdownMenu = document.getElementById('dropdown-menu');
+
+        if (menuIcon) {
+            menuIcon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdownMenu.classList.toggle('show');
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (dropdownMenu && !dropdownMenu.contains(e.target) && menuIcon && !menuIcon.contains(e.target)) {
+                dropdownMenu.classList.remove('show');
+            }
+        });
+
+        // Mode toggle (Subscriptions vs One-Time) with fade effect and rate limiting
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        const subscriptionsSection = document.getElementById('subscriptions-section');
+        const oneTimeSection = document.getElementById('one-time-section');
+        let isModeToggling = false;  // Rate limiting flag
+
+        modeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Rate limiting - prevent spam clicking during animation
+                if (isModeToggling) {
+                    return;
+                }
+
+                const mode = btn.dataset.mode;
+
+                // Update button states
+                modeButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Determine which section to show/hide
+                const currentSection = subscriptionsSection.style.display !== 'none' ? subscriptionsSection : oneTimeSection;
+                const newSection = mode === 'subscriptions' ? subscriptionsSection : oneTimeSection;
+
+                // Skip if already on the right section
+                if (currentSection === newSection) return;
+
+                // Lock the toggle during animation
+                isModeToggling = true;
+
+                // Fade out current section
+                currentSection.classList.add('fade-out');
+
+                // After fade out, switch sections and fade in
+                setTimeout(() => {
+                    currentSection.style.display = 'none';
+                    currentSection.classList.remove('fade-out');
+
+                    newSection.style.display = 'block';
+                    newSection.classList.add('fade-in');
+
+                    // Remove fade-in class after animation and unlock toggle
+                    setTimeout(() => {
+                        newSection.classList.remove('fade-in');
+                        isModeToggling = false;  // Unlock after animation completes
+                    }, 300);
+                }, 300);
+            });
+        });
+
+        // Billing toggle (Monthly/Yearly) with fade effect on entire cards and rate limiting
+        const billingToggle = document.getElementById('billingToggle');
+        const subscriptionCards = document.querySelectorAll('#subscriptions-section .plan-card');
+        const monthlyPrices = document.querySelectorAll('.monthly-price');
+        const yearlyPrices = document.querySelectorAll('.yearly-price');
+        const monthlyPeriods = document.querySelectorAll('.monthly-period');
+        const yearlyPeriods = document.querySelectorAll('.yearly-period');
+        const yearlySavings = document.querySelectorAll('.yearly-savings');
+        let isToggling = false;  // Rate limiting flag
+
+        if (billingToggle) {
+            billingToggle.addEventListener('change', (e) => {
+                // Rate limiting - prevent spam clicking
+                if (isToggling) {
+                    e.preventDefault();
+                    billingToggle.checked = !billingToggle.checked;  // Revert the change
+                    return;
+                }
+
+                isToggling = true;  // Lock the toggle
+                const isYearly = billingToggle.checked;
+
+                // Fade out all subscription plan cards
+                subscriptionCards.forEach(card => card.classList.add('fade-out'));
+
+                // After fade out, switch display and fade in
+                setTimeout(() => {
+                    monthlyPrices.forEach(el => {
+                        el.style.display = isYearly ? 'none' : 'flex';
+                    });
+
+                    yearlyPrices.forEach(el => {
+                        el.style.display = isYearly ? 'flex' : 'none';
+                    });
+
+                    monthlyPeriods.forEach(el => {
+                        el.style.display = isYearly ? 'none' : 'inline';
+                    });
+
+                    yearlyPeriods.forEach(el => {
+                        el.style.display = isYearly ? 'inline' : 'none';
+                    });
+
+                    yearlySavings.forEach(el => {
+                        el.style.display = isYearly ? 'block' : 'none';
+                    });
+
+                    // Fade in cards
+                    subscriptionCards.forEach(card => {
+                        card.classList.remove('fade-out');
+                        card.classList.add('fade-in');
+                    });
+
+                    // Remove fade-in class after animation and unlock toggle
+                    setTimeout(() => {
+                        subscriptionCards.forEach(card => card.classList.remove('fade-in'));
+                        isToggling = false;  // Unlock the toggle after animation completes
+                    }, 300);
+                }, 300);
+            });
+        }
+
+        // Plan card glow effect - always on
+        const planCards = document.querySelectorAll('.plan-card');
+        planCards.forEach(card => {
+            const glowColor = card.dataset.glow;
+            // Set initial glow
+            card.style.boxShadow = `0 0 30px ${glowColor}`;
+
+            // Enhance glow on hover
+            card.addEventListener('mouseenter', () => {
+                card.style.boxShadow = `0 0 50px ${glowColor}`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.boxShadow = `0 0 30px ${glowColor}`;
+            });
+        });
+
+        // Check if user is logged in
+        const isUserLoggedIn = {{ 'true' if session.get('user') else 'false' }};
+
+        // Disable "Current Plan" buttons and style them
+        const purchaseButtons = document.querySelectorAll('.purchase-btn');
+        purchaseButtons.forEach(btn => {
+            if (btn.textContent.trim() === 'Current Plan') {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+        });
+
+        // Purchase button handlers
+        purchaseButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Skip if button is "Current Plan"
+                if (btn.textContent.trim() === 'Current Plan') {
+                    return;
+                }
+
+                // Check if user is logged in first
+                if (!isUserLoggedIn) {
+                    alert('You must be logged in to purchase a plan.');
+                    return;
+                }
+
+                const planType = btn.dataset.planType;
+                const planId = btn.dataset.planId;
+                const isYearly = billingToggle && billingToggle.checked;
+
+                // Get plan name from the card
+                const planCard = btn.closest('.plan-card');
+                const planName = planCard.querySelector('.plan-name').textContent;
+                const billingInfo = planType === 'subscription'
+                    ? (isYearly ? ' (Yearly)' : ' (Monthly)')
+                    : '';
+
+                // Show confirmation dialog
+                const confirmMessage = `Are you sure you want to activate the ${planName}${billingInfo} plan?\n\nThis will replace any existing plan on your account.`;
+
+                if (!confirm(confirmMessage)) {
+                    return; // User cancelled
+                }
+
+                // For testing: just set the plan on the account
+                fetch('/api/set-plan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        plan_type: planType,
+                        plan_id: planId,
+                        billing_period: isYearly ? 'yearly' : 'monthly'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`${planName}${billingInfo} plan activated successfully!`);
+                        window.location.href = '/panel';
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    alert('Error activating plan: ' + error);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
