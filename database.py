@@ -372,6 +372,10 @@ def get_user_data(user_id):
     }
 
 def delete_user(discord_id):
+    """
+    Permanently delete a user and ALL their data.
+    This ensures complete removal with no recovery possible.
+    """
     conn = get_db()
     cursor = conn.cursor()
 
@@ -381,12 +385,37 @@ def delete_user(discord_id):
 
     if user:
         user_id = user[0]
-        # Delete related records
+
+        # Delete business team if user owns one
+        cursor.execute('SELECT id FROM business_teams WHERE owner_user_id = ?', (user_id,))
+        team = cursor.fetchone()
+        if team:
+            team_id = team[0]
+            # Delete all team members first
+            cursor.execute('DELETE FROM business_team_members WHERE team_id = ?', (team_id,))
+            # Delete the team
+            cursor.execute('DELETE FROM business_teams WHERE id = ?', (team_id,))
+
+        # Remove user from any business teams they're a member of
+        cursor.execute('DELETE FROM business_team_members WHERE member_discord_id = ?', (discord_id,))
+
+        # Delete all subscriptions
         cursor.execute('DELETE FROM subscriptions WHERE user_id = ?', (user_id,))
+
+        # Delete all usage data
         cursor.execute('DELETE FROM usage WHERE user_id = ?', (user_id,))
+
+        # Delete all user data (saved channels, drafts, etc.)
         cursor.execute('DELETE FROM user_data WHERE user_id = ?', (user_id,))
+
+        # Finally delete the user record (includes encrypted token)
         cursor.execute('DELETE FROM users WHERE discord_id = ?', (discord_id,))
+
         conn.commit()
+
+        # Run VACUUM to permanently remove deleted data from database file
+        # This ensures data cannot be recovered from disk
+        cursor.execute('VACUUM')
 
     conn.close()
 
