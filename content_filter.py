@@ -42,18 +42,31 @@ def check_message_content(message, user_id=None):
         if whitelisted.lower() in message_lower:
             return True, None
 
-    # Check blacklist
+    # Check blacklist - find ALL prohibited words
+    found_words = []
     for word in BLACKLISTED_WORDS:
         if word.lower() in message_lower:
-            # Flag the user if user_id is provided
-            if user_id:
-                try:
-                    from database import flag_user
-                    flag_user(user_id)
-                except Exception as e:
-                    print(f"[WARNING] Failed to flag user {user_id}: {e}")
+            found_words.append(word)
 
-            return False, f"Message contains prohibited content: '{word}'"
+    if found_words:
+        # Create comprehensive flag reason with all prohibited words and full message
+        prohibited_list = "', '".join(found_words)
+        reason = f"Prohibited content: '{prohibited_list}'\n\nFull message:\n{message}"
+
+        # Flag the user if user_id is provided
+        if user_id:
+            try:
+                from database import flag_user
+                flag_user(user_id, reason)
+            except Exception as e:
+                print(f"[WARNING] Failed to flag user {user_id}: {e}")
+
+        # Return error message with ALL prohibited words to user
+        if len(found_words) == 1:
+            error_msg = f"Message contains prohibited content: '{found_words[0]}'"
+        else:
+            error_msg = f"Message contains prohibited content: '{prohibited_list}'"
+        return False, error_msg
 
     return True, None
 

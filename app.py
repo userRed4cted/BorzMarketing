@@ -34,10 +34,7 @@ DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', 'http://127.0.0.1:5000/
 DISCORD_API_BASE = 'https://discord.com/api/v10'
 DISCORD_OAUTH_URL = f'https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={DISCORD_REDIRECT_URI}&response_type=code&scope=identify%20guilds'
 
-# Debug: Print loaded OAuth credentials (masked for security)
-print(f"[CONFIG] Loaded Discord Client ID: {DISCORD_CLIENT_ID}")
-print(f"[CONFIG] Loaded Discord Client Secret: {DISCORD_CLIENT_SECRET[:5] if DISCORD_CLIENT_SECRET else 'None'}...{DISCORD_CLIENT_SECRET[-5:] if DISCORD_CLIENT_SECRET and len(DISCORD_CLIENT_SECRET) > 10 else ''}")
-print(f"[CONFIG] Loaded Redirect URI: {DISCORD_REDIRECT_URI}")
+# OAuth credentials loaded from environment variables
 
 # Initialize database
 init_db()
@@ -69,12 +66,7 @@ def fetch_discord_user_info(discord_id):
     """Fetch user information from Discord API using bot token."""
     bot_token = os.getenv('DISCORD_BOT_TOKEN')
 
-    print(f"[DISCORD API] Bot token loaded: {'Yes' if bot_token else 'No'}")
-    if bot_token:
-        print(f"[DISCORD API] Bot token starts with: {bot_token[:20]}...")
-
     if not bot_token:
-        print(f"[DISCORD API] Error: DISCORD_BOT_TOKEN not set in environment")
         return None, None
 
     try:
@@ -234,7 +226,6 @@ def oauth_callback():
 
         token_data = token_response.json()
         access_token = token_data.get('access_token')
-        print(f"[CALLBACK] Got access token: {access_token[:20] if access_token else 'None'}...")
 
         # Get user information
         auth_headers = {'Authorization': f'Bearer {access_token}'}
@@ -496,6 +487,11 @@ def panel():
         session.clear()
         return redirect(url_for('login_page'))
 
+    # Check if user is banned
+    if user.get('banned', 0) == 1:
+        session.clear()
+        return redirect(url_for('home'))
+
     plan_status = get_plan_status(user['id'])
     if not plan_status['has_plan']:
         # Redirect to purchase page if no active plan
@@ -503,8 +499,8 @@ def panel():
 
     # Block business plan holders from accessing personal panel
     if plan_status.get('plan_id', '').startswith('business_'):
-        # Redirect business plan holders to business panel instead
-        return redirect(url_for('business_panel'))
+        # Redirect business plan holders to purchase page
+        return redirect(url_for('purchase'))
 
     user_token = session.get('user_token')
     headers = {'Authorization': user_token}
@@ -514,7 +510,7 @@ def panel():
 
     if resp.status_code != 200:
         session.clear()
-        return redirect(url_for('index'))
+        return redirect(url_for('home'))
 
     guilds = resp.json()
 
@@ -720,6 +716,11 @@ def business_management():
         session.clear()
         return redirect(url_for('login_page'))
 
+    # Check if user is banned
+    if user.get('banned', 0) == 1:
+        session.clear()
+        return redirect(url_for('home'))
+
     # Check if user owns a business plan
     from database import get_business_team_by_owner, get_team_members, get_team_member_stats, update_team_member_info
     team = get_business_team_by_owner(user['id'])
@@ -774,6 +775,11 @@ def business_panel():
         session.clear()
         return redirect(url_for('login_page'))
 
+    # Check if user is banned
+    if user.get('banned', 0) == 1:
+        session.clear()
+        return redirect(url_for('home'))
+
     # Check if user is team owner or member
     from database import get_business_team_by_owner, get_business_team_by_member
     team = get_business_team_by_owner(user['id'])
@@ -793,7 +799,7 @@ def business_panel():
 
     if resp.status_code != 200:
         session.clear()
-        return redirect(url_for('index'))
+        return redirect(url_for('home'))
 
     guilds = resp.json()
 
@@ -1111,6 +1117,154 @@ def set_team_message():
     except Exception as e:
         print(f"[ERROR] Set team message error: {str(e)}")
         return {'success': False, 'error': str(e)}, 500
+
+
+# Team invitation API endpoints
+
+@app.route('/api/team/invitations', methods=['GET'])
+def get_invitations():
+    """Get pending team invitations for the current user."""
+    if 'user' not in session:
+        return {'success': False, 'error': 'Not logged in'}, 401
+
+    try:
+        from database import get_team_invitations
+        invitations = get_team_invitations(session['user']['id'])
+        return {'success': True, 'invitations': invitations}, 200
+
+    except Exception as e:
+        print(f"[ERROR] Get invitations error: {str(e)}")
+        return {'success': False, 'error': str(e)}, 500
+
+
+@app.route('/api/team/invitation/accept/<int:member_id>', methods=['POST'])
+def accept_invitation(member_id):
+    """Accept a team invitation."""
+    if 'user' not in session:
+        return {'success': False, 'error': 'Not logged in'}, 401
+
+    try:
+        from database import accept_team_invitation, get_team_invitations, deny_team_invitation
+
+        # Get all invitations for this user
+        invitations = get_team_invitations(session['user']['id'])
+
+        # Check if this invitation belongs to the user
+        invitation = next((inv for inv in invitations if inv['id'] == member_id), None)
+        if not invitation:
+            return {'success': False, 'error': 'Invitation not found'}, 404
+
+        # Accept this invitation
+        accept_team_invitation(member_id)
+
+        # Deny all other pending invitations for this user
+        for inv in invitations:
+            if inv['id'] != member_id:
+                deny_team_invitation(inv['id'])
+
+        return {'success': True, 'message': 'Invitation accepted'}, 200
+
+    except Exception as e:
+        print(f"[ERROR] Accept invitation error: {str(e)}")
+        return {'success': False, 'error': str(e)}, 500
+
+
+@app.route('/api/team/invitation/deny/<int:member_id>', methods=['POST'])
+def deny_invitation(member_id):
+    """Deny a team invitation."""
+    if 'user' not in session:
+        return {'success': False, 'error': 'Not logged in'}, 401
+
+    try:
+        from database import deny_team_invitation, get_team_invitations
+
+        # Verify this invitation belongs to the user
+        invitations = get_team_invitations(session['user']['id'])
+        invitation = next((inv for inv in invitations if inv['id'] == member_id), None)
+        if not invitation:
+            return {'success': False, 'error': 'Invitation not found'}, 404
+
+        deny_team_invitation(member_id)
+        return {'success': True, 'message': 'Invitation denied'}, 200
+
+    except Exception as e:
+        print(f"[ERROR] Deny invitation error: {str(e)}")
+        return {'success': False, 'error': str(e)}, 500
+
+
+@app.route('/api/team/invitations/clear', methods=['POST'])
+def clear_invitations():
+    """Clear all pending invitations for the current user."""
+    if 'user' not in session:
+        return {'success': False, 'error': 'Not logged in'}, 401
+
+    try:
+        from database import clear_all_invitations
+        clear_all_invitations(session['user']['id'])
+        return {'success': True, 'message': 'All invitations cleared'}, 200
+
+    except Exception as e:
+        print(f"[ERROR] Clear invitations error: {str(e)}")
+        return {'success': False, 'error': str(e)}, 500
+
+
+@app.route('/api/team/leave', methods=['POST'])
+def leave_team_route():
+    """Leave the current team."""
+    if 'user' not in session:
+        return {'success': False, 'error': 'Not logged in'}, 401
+
+    try:
+        from database import leave_team, get_current_team_for_member
+
+        # Check if user is in a team
+        team = get_current_team_for_member(session['user']['id'])
+        if not team:
+            return {'success': False, 'error': 'Not in any team'}, 404
+
+        leave_team(session['user']['id'])
+        return {'success': True, 'message': 'Left team successfully'}, 200
+
+    except Exception as e:
+        print(f"[ERROR] Leave team error: {str(e)}")
+        return {'success': False, 'error': str(e)}, 500
+
+
+@app.route('/api/team/member/remove/<int:member_id>', methods=['POST'])
+def remove_member_from_list(member_id):
+    """Remove a team member from the list (owner only, for denied/left members)."""
+    if 'user' not in session:
+        return {'success': False, 'error': 'Not logged in'}, 401
+
+    try:
+        user = get_user_by_discord_id(session['user']['id'])
+        if not user:
+            return {'success': False, 'error': 'User not found'}, 404
+
+        from database import get_business_team_by_owner, remove_team_member_from_list, get_team_members
+
+        # Check if user owns a business team
+        team = get_business_team_by_owner(user['id'])
+        if not team:
+            return {'success': False, 'error': 'No business team found'}, 404
+
+        # Verify this member belongs to this team
+        members = get_team_members(team['id'])
+        member = next((m for m in members if m['id'] == member_id), None)
+        if not member:
+            return {'success': False, 'error': 'Member not found'}, 404
+
+        # Can only remove denied or left members
+        if member['invitation_status'] not in ['denied', 'left']:
+            return {'success': False, 'error': 'Can only remove denied or left members'}, 400
+
+        remove_team_member_from_list(member_id)
+        return {'success': True, 'message': 'Member removed from list'}, 200
+
+    except Exception as e:
+        print(f"[ERROR] Remove member from list error: {str(e)}")
+        return {'success': False, 'error': str(e)}, 500
+
 
 @app.route('/admin')
 def admin_panel():

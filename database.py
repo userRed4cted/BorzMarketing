@@ -35,6 +35,18 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Add flag_reason column if it doesn't exist (migration)
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN flag_reason TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Add flagged_at column if it doesn't exist (migration)
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN flagged_at TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     # Subscriptions table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS subscriptions (
@@ -103,6 +115,7 @@ def init_db():
             member_discord_id TEXT NOT NULL,
             member_username TEXT,
             member_avatar TEXT,
+            invitation_status TEXT DEFAULT 'pending',
             added_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (team_id) REFERENCES business_teams(id),
             UNIQUE(team_id, member_discord_id)
@@ -136,6 +149,17 @@ def init_db():
     user_data_columns = [column[1] for column in cursor.fetchall()]
     if 'business_selected_channels' not in user_data_columns:
         cursor.execute('ALTER TABLE user_data ADD COLUMN business_selected_channels TEXT')
+
+    # Migration: Add invitation_status to business_team_members
+    cursor.execute("PRAGMA table_info(business_team_members)")
+    team_members_columns = [column[1] for column in cursor.fetchall()]
+    if 'invitation_status' not in team_members_columns:
+        cursor.execute("ALTER TABLE business_team_members ADD COLUMN invitation_status TEXT DEFAULT 'pending'")
+        # Set existing members to 'accepted' status
+        cursor.execute("UPDATE business_team_members SET invitation_status = 'accepted' WHERE invitation_status IS NULL")
+
+    # Note: max_members is set when business team is created
+    # Changing config.py values won't affect existing teams to preserve user data
 
     conn.commit()
     conn.close()
@@ -247,10 +271,9 @@ def save_user_data(user_id, selected_channels=None, draft_message=None, message_
             params.append(datetime.now().isoformat())
             params.append(user_id)
 
-            cursor.execute(f'''
-                UPDATE user_data SET {', '.join(update_parts)}
-                WHERE user_id = ?
-            ''', params)
+            # Build query safely - update_parts are hardcoded column names, not user input
+            query = f'UPDATE user_data SET {", ".join(update_parts)} WHERE user_id = ?'
+            cursor.execute(query, params)
     else:
         # Insert new record
         cursor.execute('''
@@ -367,9 +390,10 @@ def set_subscription(user_id, plan_type, plan_id, plan_config, billing_period=No
         end_date
     ))
 
-    # Reset usage when activating a new plan
+    # Update last_reset timestamp but preserve messages_sent count
+    # This ensures that changing plans doesn't reset user's usage progress
     cursor.execute('''
-        UPDATE usage SET messages_sent = 0, last_reset = ? WHERE user_id = ?
+        UPDATE usage SET last_reset = ? WHERE user_id = ?
     ''', (start_date.isoformat(), user_id))
 
     conn.commit()
@@ -687,14 +711,14 @@ def get_business_team_by_member(discord_id):
     return dict(team) if team else None
 
 def add_team_member(team_id, discord_id, username, avatar):
-    """Add a member to a business team."""
+    """Add a member to a business team with pending invitation status."""
     conn = get_db()
     cursor = conn.cursor()
 
     try:
         cursor.execute('''
-            INSERT INTO business_team_members (team_id, member_discord_id, member_username, member_avatar, added_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO business_team_members (team_id, member_discord_id, member_username, member_avatar, invitation_status, added_at)
+            VALUES (?, ?, ?, ?, 'pending', ?)
         ''', (team_id, discord_id, username, avatar, datetime.now().isoformat()))
         conn.commit()
         conn.close()
@@ -751,10 +775,13 @@ def get_team_members(team_id):
     return [dict(member) for member in members]
 
 def get_team_member_count(team_id):
-    """Get the count of team members."""
+    """Get the count of active team members (accepted invitations only)."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM business_team_members WHERE team_id = ?', (team_id,))
+    cursor.execute('''
+        SELECT COUNT(*) FROM business_team_members
+        WHERE team_id = ? AND invitation_status = 'accepted'
+    ''', (team_id,))
     count = cursor.fetchone()[0]
     conn.close()
     return count
@@ -826,6 +853,106 @@ def get_team_member_stats(team_id):
     return stats
 
 
+# Team invitation management functions
+
+def get_team_invitations(discord_id):
+    """Get all pending team invitations for a user."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT btm.*, bt.owner_user_id, u.username as owner_username, u.avatar as owner_avatar, u.discord_id as owner_discord_id
+        FROM business_team_members btm
+        JOIN business_teams bt ON btm.team_id = bt.id
+        JOIN users u ON bt.owner_user_id = u.id
+        WHERE btm.member_discord_id = ? AND btm.invitation_status = 'pending'
+        ORDER BY btm.added_at DESC
+    ''', (discord_id,))
+    invitations = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return invitations
+
+
+def accept_team_invitation(member_id):
+    """Accept a team invitation."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE business_team_members
+        SET invitation_status = 'accepted'
+        WHERE id = ?
+    ''', (member_id,))
+    conn.commit()
+    conn.close()
+
+
+def deny_team_invitation(member_id):
+    """Deny a team invitation."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE business_team_members
+        SET invitation_status = 'denied'
+        WHERE id = ?
+    ''', (member_id,))
+    conn.commit()
+    conn.close()
+
+
+def clear_all_invitations(discord_id):
+    """Clear all pending invitations for a user by marking them as denied."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE business_team_members
+        SET invitation_status = 'denied'
+        WHERE member_discord_id = ? AND invitation_status = 'pending'
+    ''', (discord_id,))
+    conn.commit()
+    conn.close()
+
+
+def leave_team(discord_id):
+    """Leave a team by updating status to 'left'."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE business_team_members
+        SET invitation_status = 'left'
+        WHERE member_discord_id = ? AND invitation_status = 'accepted'
+    ''', (discord_id,))
+    conn.commit()
+    conn.close()
+
+
+def remove_team_member_from_list(member_id):
+    """Remove a team member from the list (for denied/left members)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        DELETE FROM business_team_members
+        WHERE id = ? AND invitation_status IN ('denied', 'left')
+    ''', (member_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_current_team_for_member(discord_id):
+    """Get the current team a member is part of (accepted status)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT bt.*, u.username as owner_username, u.discord_id as owner_discord_id
+        FROM business_team_members btm
+        JOIN business_teams bt ON btm.team_id = bt.id
+        JOIN users u ON bt.owner_user_id = u.id
+        WHERE btm.member_discord_id = ? AND btm.invitation_status = 'accepted'
+        ORDER BY btm.added_at DESC LIMIT 1
+    ''', (discord_id,))
+    team = cursor.fetchone()
+    conn.close()
+    return dict(team) if team else None
+
+
 # Admin Functions
 
 def get_all_users_for_admin(filters=None):
@@ -877,14 +1004,12 @@ def get_user_admin_details(user_id):
 
     # Get user basic info
     cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
-    user = dict(cursor.fetchone()) if cursor.fetchone() else None
-
-    if not user:
+    result = cursor.fetchone()
+    if not result:
         conn.close()
         return None
 
-    cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
-    user = dict(cursor.fetchone())
+    user = dict(result)
 
     # Check if user is admin
     from admin_config import is_admin
@@ -912,8 +1037,8 @@ def get_user_admin_details(user_id):
         SELECT bt.*, btm.member_discord_id
         FROM business_team_members btm
         JOIN business_teams bt ON btm.team_id = bt.id
-        WHERE btm.user_id = ?
-    ''', (user_id,))
+        WHERE btm.member_discord_id = ? AND btm.invitation_status = 'accepted'
+    ''', (user['discord_id'],))
     team_member = cursor.fetchone()
     user['is_business_member'] = team_member is not None
     if team_member:
@@ -946,11 +1071,12 @@ def unban_user(user_id):
     conn.close()
 
 
-def flag_user(user_id):
+def flag_user(user_id, reason=None):
     """Flag a user for inappropriate content."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('UPDATE users SET flagged = 1 WHERE id = ?', (user_id,))
+    flagged_at = datetime.now().isoformat()
+    cursor.execute('UPDATE users SET flagged = 1, flag_reason = ?, flagged_at = ? WHERE id = ?', (reason, flagged_at, user_id))
     conn.commit()
     conn.close()
 
@@ -959,7 +1085,7 @@ def unflag_user(user_id):
     """Remove flag from a user."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('UPDATE users SET flagged = 0 WHERE id = ?', (user_id,))
+    cursor.execute('UPDATE users SET flagged = 0, flag_reason = NULL, flagged_at = NULL WHERE id = ?', (user_id,))
     conn.commit()
     conn.close()
 
@@ -980,14 +1106,17 @@ def delete_user_account_admin(user_id):
         cursor.execute('DELETE FROM business_team_members WHERE team_id = ?', (team_id,))
         cursor.execute('DELETE FROM business_teams WHERE id = ?', (team_id,))
 
-    # Remove from business teams they're a member of
-    cursor.execute('DELETE FROM business_team_members WHERE user_id = ?', (user_id,))
+    # Get user's discord_id to remove from business teams
+    cursor.execute('SELECT discord_id FROM users WHERE id = ?', (user_id,))
+    user_row = cursor.fetchone()
+    if user_row:
+        cursor.execute('DELETE FROM business_team_members WHERE member_discord_id = ?', (user_row[0],))
 
     # Delete user's saved data
     cursor.execute('DELETE FROM user_data WHERE user_id = ?', (user_id,))
 
     # Delete usage tracking
-    cursor.execute('DELETE FROM usage_tracking WHERE user_id = ?', (user_id,))
+    cursor.execute('DELETE FROM usage WHERE user_id = ?', (user_id,))
 
     # Finally delete the user
     cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))

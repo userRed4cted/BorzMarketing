@@ -1115,6 +1115,7 @@ body {
     gap: 2rem;
     align-content: start;
     width: 100%;
+    padding-bottom: 4rem;
 }
 
 .settings-panel {

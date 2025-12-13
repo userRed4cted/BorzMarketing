@@ -43,7 +43,9 @@
             <div class="dropdown-menu" id="dropdown-menu">
                 <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
                 <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
+                {% if plan_status and plan_status.has_plan and not (plan_status.plan_id and plan_status.plan_id.startswith('business_')) %}
                 <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
+                {% endif %}
                 {% if has_business %}
                 <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
                 <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
@@ -98,11 +100,25 @@
                                             <div class="member-discord-id">ID: {{ member.member_discord_id }}</div>
                                         </div>
                                         {% if member.user_id %}
-                                            <span class="signup-tag signup-tag-yes">Signed Up</span>
+                                            <span class="status-tag status-has-account">Has Account</span>
                                         {% else %}
-                                            <span class="signup-tag signup-tag-no">Not Signed Up</span>
+                                            <span class="status-tag status-no-account">No Account</span>
                                         {% endif %}
-                                        <button class="member-remove-btn" data-discord-id="{{ member.member_discord_id }}">✕</button>
+                                        {% set status = member.invitation_status or 'pending' %}
+                                        {% if status == 'pending' %}
+                                            <span class="status-tag status-pending">Pending</span>
+                                        {% elif status == 'accepted' %}
+                                            <span class="status-tag status-accepted">Team member</span>
+                                        {% elif status == 'denied' %}
+                                            <span class="status-tag status-denied">Denied request</span>
+                                            <button class="member-remove-btn member-remove-from-list" data-member-id="{{ member.id }}">Remove from list</button>
+                                        {% elif status == 'left' %}
+                                            <span class="status-tag status-left">Left team</span>
+                                            <button class="member-remove-btn member-remove-from-list" data-member-id="{{ member.id }}">Remove from list</button>
+                                        {% endif %}
+                                        {% if status not in ['denied', 'left'] %}
+                                            <button class="member-remove-btn" data-discord-id="{{ member.member_discord_id }}">✕</button>
+                                        {% endif %}
                                     </div>
                                 {% endfor %}
                             {% endif %}
@@ -233,7 +249,7 @@
             font-family: 'Roboto', sans-serif;
         }
 
-        .signup-tag {
+        .status-tag {
             font-size: 0.65rem;
             padding: 0.2rem 0.5rem;
             border-radius: 4px;
@@ -243,16 +259,40 @@
             white-space: nowrap;
         }
 
-        .signup-tag-yes {
-            background: rgba(88, 101, 242, 0.2);
-            color: #5865f2;
-            border: 1px solid rgba(88, 101, 242, 0.4);
+        .status-pending {
+            background: #121215;
+            color: #8e9297;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        .signup-tag-no {
-            background: rgba(255, 255, 255, 0.1);
+        .status-accepted {
+            background: rgba(51, 95, 255, 0.2);
+            color: #335FFF;
+            border: 1px solid rgba(51, 95, 255, 0.4);
+        }
+
+        .status-denied {
+            background: rgba(231, 76, 60, 0.2);
+            color: #E74C3C;
+            border: 1px solid rgba(231, 76, 60, 0.4);
+        }
+
+        .status-left {
+            background: rgba(231, 76, 60, 0.2);
+            color: #E74C3C;
+            border: 1px solid rgba(231, 76, 60, 0.4);
+        }
+
+        .status-has-account {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+            border: 1px solid rgba(46, 204, 113, 0.4);
+        }
+
+        .status-no-account {
+            background: rgba(149, 155, 164, 0.2);
             color: #949ba4;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(149, 155, 164, 0.4);
         }
 
         .member-remove-btn {
@@ -483,18 +523,30 @@
             document.querySelectorAll('.member-remove-btn').forEach(btn => {
                 btn.addEventListener('click', async function() {
                     const discordId = this.dataset.discordId;
+                    const memberId = this.dataset.memberId;
+                    const isRemoveFromList = this.classList.contains('member-remove-from-list');
 
                     this.disabled = true;
 
                     try {
-                        const response = await fetch('/api/business/remove-member', {
+                        let endpoint, bodyData;
+
+                        if (isRemoveFromList && memberId) {
+                            // Remove denied/left member from list
+                            endpoint = `/api/team/member/remove/${memberId}`;
+                            bodyData = {};
+                        } else if (discordId) {
+                            // Regular removal (pending or accepted members)
+                            endpoint = '/api/business/remove-member';
+                            bodyData = { discord_id: discordId };
+                        }
+
+                        const response = await fetch(endpoint, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify({
-                                discord_id: discordId
-                            })
+                            body: JSON.stringify(bodyData)
                         });
 
                         const data = await response.json();

@@ -208,54 +208,57 @@
         }
 
         .admin-actions {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            display: flex;
+            flex-direction: column;
             gap: 12px;
             margin-top: 30px;
         }
 
         .admin-btn {
             padding: 12px 20px;
-            border: none;
+            border: 2px solid #335FFF;
             border-radius: 6px;
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
             color: #fff;
-        }
-
-        .admin-btn:hover {
-            opacity: 0.8;
-            transform: translateY(-2px);
-        }
-
-        .admin-btn.view-message {
             background: #335FFF;
         }
 
-        .admin-btn.clear-flag {
-            background: #ffa500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+        .admin-btn:hover:not(:disabled) {
+            background: #4575FF;
+            border-color: #4575FF;
         }
 
         .admin-btn.delete {
             background: #e74c3c;
+            border-color: #e74c3c;
+        }
+
+        .admin-btn.delete:hover:not(:disabled) {
+            background: #c0392b;
+            border-color: #c0392b;
+        }
+
+        .admin-btn.delete.confirm-delete {
+            background: #c0392b;
+            border: 2px solid #e74c3c;
         }
 
         .admin-btn.ban {
+            background: #e74c3c;
+            border-color: #e74c3c;
+        }
+
+        .admin-btn.ban:hover:not(:disabled) {
             background: #c0392b;
+            border-color: #c0392b;
         }
 
-        .admin-btn.unban {
-            background: #27ae60;
-        }
-
-        .admin-btn.view-team-message {
-            background: #9b59b6;
+        .admin-btn.ban.confirm-ban {
+            background: #c0392b;
+            border: 2px solid #e74c3c;
         }
 
         .admin-btn:disabled {
@@ -355,7 +358,7 @@
             width: 100%;
             padding: 10px 12px;
             background: #212227;
-            border: 1px solid #335FFF;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 6px;
             color: #fff;
             font-size: 14px;
@@ -364,7 +367,7 @@
 
         .search-input:focus {
             outline: none;
-            border-color: #4575FF;
+            border-color: rgba(255, 255, 255, 0.3);
         }
 
         .search-input:active {
@@ -490,20 +493,20 @@
             <div class="dialog-header" id="dialog-title">User Message</div>
             <div class="dialog-content" id="dialog-message"></div>
             <div class="dialog-actions">
-                <button class="dialog-btn primary" onclick="copyMessage()">Copy to Clipboard</button>
+                <button class="dialog-btn primary" id="copy-message-btn" onclick="copyMessage()">Copy to Clipboard</button>
                 <button class="dialog-btn secondary" onclick="closeDialog()">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Confirmation Dialog -->
-    <div class="dialog-overlay" id="confirm-dialog">
+    <!-- Flagging Dialog -->
+    <div class="dialog-overlay" id="flagging-dialog">
         <div class="dialog-box">
-            <div class="dialog-header" id="confirm-title">Confirm Action</div>
-            <div class="dialog-content" id="confirm-message"></div>
+            <div class="dialog-header">User Flagging Information</div>
+            <div class="dialog-content" id="flagging-reason"></div>
             <div class="dialog-actions">
-                <button class="dialog-btn primary" id="confirm-yes">Yes</button>
-                <button class="dialog-btn secondary" onclick="closeConfirmDialog()">Cancel</button>
+                <button class="dialog-btn primary" id="unflag-confirm-btn" onclick="confirmUnflag()">Unflag User</button>
+                <button class="dialog-btn secondary" onclick="closeFlaggingDialog()">Close</button>
             </div>
         </div>
     </div>
@@ -652,8 +655,12 @@
                 if (user.flagged) tags.push('<span class="user-tag flagged">Flagged</span>');
                 if (user.is_admin) tags.push('<span class="user-tag admin">Admin</span>');
 
+                // Check if this user is currently selected
+                const isSelected = currentUser && currentUser.id === user.id;
+                const selectedClass = isSelected ? ' selected' : '';
+
                 return `
-                <div class="user-item" onclick="selectUser(${user.id}, event)" data-avatar-url="${avatarUrl || ''}">
+                <div class="user-item${selectedClass}" onclick="selectUser(${user.id}, event)" data-user-id="${user.id}" data-avatar-url="${avatarUrl || ''}">
                     ${avatarUrl
                         ? `<img src="${avatarUrl}" class="user-item-avatar" style="border-radius: 50%; object-fit: cover;" crossorigin="anonymous">`
                         : `<div class="user-item-avatar">${user.username ? user.username[0].toUpperCase() : 'U'}</div>`
@@ -666,6 +673,45 @@
                 </div>
             `;
             }).join('');
+
+            // Restore styling for the selected user
+            if (currentUser) {
+                restoreSelectedUserStyling();
+            }
+        }
+
+        function restoreSelectedUserStyling() {
+            if (!currentUser) return;
+
+            const selectedItem = document.querySelector(`.user-item[data-user-id="${currentUser.id}"]`);
+            if (!selectedItem) return;
+
+            const avatarUrl = selectedItem.dataset.avatarUrl;
+            if (avatarUrl) {
+                const avatarImg = selectedItem.querySelector('.user-item-avatar');
+                if (avatarImg && avatarImg.tagName === 'IMG') {
+                    // Wait for image to load before extracting color
+                    if (avatarImg.complete) {
+                        applyAvatarColorStyling(selectedItem, avatarImg);
+                    } else {
+                        avatarImg.addEventListener('load', () => {
+                            applyAvatarColorStyling(selectedItem, avatarImg);
+                        });
+                    }
+                }
+            } else {
+                // Use default blue color for users without avatars
+                selectedItem.style.borderColor = 'rgba(51, 95, 255, 0.6)';
+                selectedItem.style.boxShadow = '0 0 15px rgba(51, 95, 255, 0.4)';
+            }
+        }
+
+        function applyAvatarColorStyling(selectedItem, avatarImg) {
+            const dominantColor = getDominantColor(avatarImg);
+            const rgbaColor = dominantColor.replace('rgb', 'rgba').replace(')', ', 0.4)');
+            const rgbaBorder = dominantColor.replace('rgb', 'rgba').replace(')', ', 0.6)');
+            selectedItem.style.borderColor = rgbaBorder;
+            selectedItem.style.boxShadow = `0 0 15px ${rgbaColor}`;
         }
 
         async function selectUser(userId, event) {
@@ -721,6 +767,9 @@
                     ? `Member of business team (Owner: ${user.business_team_owner?.username || 'Unknown'})`
                     : 'Not part of any business team';
 
+            const isAdmin = user.is_admin;
+            const disabledAttr = isAdmin ? 'disabled' : '';
+
             panel.innerHTML = `
                 <div class="user-details-header">${user.username}</div>
                 <div class="user-details-section">
@@ -752,21 +801,27 @@
                         <div class="detail-label">Flagged</div>
                         <div class="detail-value ${user.flagged ? 'flagged' : ''}">${user.flagged ? 'Yes' : 'No'}</div>
                     </div>
+                    ${user.flagged && user.flagged_at ? `
+                    <div class="detail-row">
+                        <div class="detail-label">Last Flagged</div>
+                        <div class="detail-value flagged">${new Date(user.flagged_at).toLocaleString()}</div>
+                    </div>
+                    ` : ''}
                     <div class="detail-row">
                         <div class="detail-label">Admin</div>
-                        <div class="detail-value" style="color: ${user.is_admin ? '#335FFF' : '#fff'}; font-weight: ${user.is_admin ? '600' : 'normal'};">${user.is_admin ? 'Yes 👑' : 'No'}</div>
+                        <div class="detail-value">${user.is_admin ? 'Yes' : 'No'}</div>
                     </div>
                 </div>
 
                 <div class="admin-actions">
-                    <button class="admin-btn view-message" onclick="viewMessage()">View Saved Message</button>
-                    ${user.flagged ? `<button class="admin-btn clear-flag" onclick="unflagUser()"><span>⚠</span> Clear Flag</button>` : `<button class="admin-btn clear-flag" onclick="flagUser()" style="background: #ffa500;">Flag User</button>`}
-                    <button class="admin-btn delete" onclick="confirmDelete()">Delete Account</button>
+                    <button class="admin-btn" onclick="viewMessage()">View Saved Message</button>
+                    ${hasBusinessTeam ? `<button class="admin-btn" onclick="viewTeamMessage()">View Business Team Message</button>` : `<button class="admin-btn" onclick="viewTeamMessage()" disabled style="opacity: 0.5; cursor: not-allowed;">View Business Team Message</button>`}
+                    <button class="admin-btn" onclick="viewFlagging()" ${!user.flagged ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>View Flagging</button>
                     ${user.banned ?
-                        `<button class="admin-btn unban" onclick="unbanUser()">Unban User</button>` :
-                        `<button class="admin-btn ban" onclick="banUser()">Ban User</button>`
+                        `<button class="admin-btn ban" id="ban-btn" onclick="handleBanUnban()" ${disabledAttr}>Unban User</button>` :
+                        `<button class="admin-btn ban" id="ban-btn" onclick="handleBanUnban()" ${disabledAttr}>Ban User</button>`
                     }
-                    ${hasBusinessTeam ? `<button class="admin-btn view-team-message" onclick="viewTeamMessage()">View Business Team Message</button>` : ''}
+                    <button class="admin-btn delete" id="delete-btn" onclick="handleDelete()" ${disabledAttr}>Delete Account</button>
                 </div>
             `;
         }
@@ -782,6 +837,18 @@
                     currentMessageContent = data.message;
                     document.getElementById('dialog-title').textContent = 'User Saved Message';
                     document.getElementById('dialog-message').textContent = data.message;
+
+                    const copyBtn = document.getElementById('copy-message-btn');
+                    if (!data.message || data.message.trim() === '') {
+                        copyBtn.disabled = true;
+                        copyBtn.style.opacity = '0.5';
+                        copyBtn.style.cursor = 'not-allowed';
+                    } else {
+                        copyBtn.disabled = false;
+                        copyBtn.style.opacity = '1';
+                        copyBtn.style.cursor = 'pointer';
+                    }
+
                     document.getElementById('message-dialog').classList.add('active');
                 }
             } catch (error) {
@@ -800,6 +867,18 @@
                     currentMessageContent = data.message;
                     document.getElementById('dialog-title').textContent = 'Business Team Message';
                     document.getElementById('dialog-message').textContent = data.message;
+
+                    const copyBtn = document.getElementById('copy-message-btn');
+                    if (!data.message || data.message.trim() === '') {
+                        copyBtn.disabled = true;
+                        copyBtn.style.opacity = '0.5';
+                        copyBtn.style.cursor = 'not-allowed';
+                    } else {
+                        copyBtn.disabled = false;
+                        copyBtn.style.opacity = '1';
+                        copyBtn.style.cursor = 'pointer';
+                    }
+
                     document.getElementById('message-dialog').classList.add('active');
                 }
             } catch (error) {
@@ -817,77 +896,80 @@
             document.getElementById('message-dialog').classList.remove('active');
         }
 
-        async function banUser() {
-            if (!currentUser) return;
-            showConfirmDialog('Ban User', 'Are you sure you want to ban this user? They will not be able to use any panels or be added to business teams.', async () => {
-                try {
-                    const response = await fetch(`/api/admin/ban/${currentUser.id}`, { method: 'POST' });
-                    const data = await response.json();
+        let banConfirmed = false;
+        let deleteConfirmed = false;
 
-                    if (data.success) {
-                        alert('User banned successfully');
-                        selectUser(currentUser.id);
-                        loadUsers();
-                    }
-                } catch (error) {
-                    console.error('Error banning user:', error);
-                }
-            });
-        }
-
-        async function unbanUser() {
+        async function handleBanUnban() {
             if (!currentUser) return;
-            showConfirmDialog('Unban User', 'Are you sure you want to unban this user?', async () => {
+
+            const banBtn = document.getElementById('ban-btn');
+            const isBanned = currentUser.banned;
+
+            if (isBanned) {
+                // Unban action - no confirmation needed
                 try {
                     const response = await fetch(`/api/admin/unban/${currentUser.id}`, { method: 'POST' });
                     const data = await response.json();
 
                     if (data.success) {
                         alert('User unbanned successfully');
-                        selectUser(currentUser.id);
+                        await selectUser(currentUser.id, { currentTarget: document.querySelector('.user-item.selected') });
                         loadUsers();
+                        banConfirmed = false;
                     }
                 } catch (error) {
                     console.error('Error unbanning user:', error);
                 }
-            });
-        }
+            } else {
+                // Ban action - needs confirmation
+                if (!banConfirmed) {
+                    const confirmation = confirm('Are you sure you want to ban this user? They will not be able to use any panels or be added to business teams.');
+                    if (confirmation) {
+                        banConfirmed = true;
+                        banBtn.textContent = 'Confirm Ban';
+                        banBtn.classList.add('confirm-ban');
+                    }
+                } else {
+                    banBtn.textContent = 'Banning...';
+                    banBtn.disabled = true;
 
-        async function flagUser() {
-            if (!currentUser) return;
-            try {
-                const response = await fetch(`/api/admin/flag/${currentUser.id}`, { method: 'POST' });
-                const data = await response.json();
+                    try {
+                        const response = await fetch(`/api/admin/ban/${currentUser.id}`, { method: 'POST' });
+                        const data = await response.json();
 
-                if (data.success) {
-                    alert('User flagged successfully');
-                    selectUser(currentUser.id);
-                    loadUsers();
+                        if (data.success) {
+                            alert('User banned successfully');
+                            await selectUser(currentUser.id, { currentTarget: document.querySelector('.user-item.selected') });
+                            loadUsers();
+                            banConfirmed = false;
+                        }
+                    } catch (error) {
+                        console.error('Error banning user:', error);
+                        banBtn.disabled = false;
+                        banBtn.textContent = 'Ban User';
+                        banBtn.classList.remove('confirm-ban');
+                        banConfirmed = false;
+                    }
                 }
-            } catch (error) {
-                console.error('Error flagging user:', error);
             }
         }
 
-        async function unflagUser() {
+        async function handleDelete() {
             if (!currentUser) return;
-            try {
-                const response = await fetch(`/api/admin/unflag/${currentUser.id}`, { method: 'POST' });
-                const data = await response.json();
 
-                if (data.success) {
-                    alert('User unflagged successfully');
-                    selectUser(currentUser.id);
-                    loadUsers();
+            const deleteBtn = document.getElementById('delete-btn');
+
+            if (!deleteConfirmed) {
+                const confirmation = confirm('Are you sure you want to permanently delete this account? This action cannot be undone and will remove all user data.');
+                if (confirmation) {
+                    deleteConfirmed = true;
+                    deleteBtn.textContent = 'Confirm Delete';
+                    deleteBtn.classList.add('confirm-delete');
                 }
-            } catch (error) {
-                console.error('Error unflagging user:', error);
-            }
-        }
+            } else {
+                deleteBtn.textContent = 'Deleting...';
+                deleteBtn.disabled = true;
 
-        function confirmDelete() {
-            if (!currentUser) return;
-            showConfirmDialog('Delete Account', 'Are you sure you want to permanently delete this account? This action cannot be undone and will remove all user data.', async () => {
                 try {
                     const response = await fetch(`/api/admin/delete/${currentUser.id}`, { method: 'POST' });
                     const data = await response.json();
@@ -897,30 +979,84 @@
                         document.getElementById('user-details-panel').innerHTML = '<div class="admin-placeholder">Select a user to view details</div>';
                         currentUser = null;
                         loadUsers();
+                        deleteConfirmed = false;
                     }
                 } catch (error) {
                     console.error('Error deleting user:', error);
+                    deleteBtn.disabled = false;
+                    deleteBtn.textContent = 'Delete Account';
+                    deleteBtn.classList.remove('confirm-delete');
+                    deleteConfirmed = false;
                 }
-            });
+            }
         }
 
-        function showConfirmDialog(title, message, onConfirm) {
-            document.getElementById('confirm-title').textContent = title;
-            document.getElementById('confirm-message').textContent = message;
-            document.getElementById('confirm-dialog').classList.add('active');
+        async function viewFlagging() {
+            if (!currentUser) return;
+            if (!currentUser.flagged) return; // Only show if user is flagged
 
-            const yesBtn = document.getElementById('confirm-yes');
-            const newYesBtn = yesBtn.cloneNode(true);
-            yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+            const flagReason = currentUser.flag_reason || 'No reason provided';
+            const reasonElement = document.getElementById('flagging-reason');
+            reasonElement.style.whiteSpace = 'pre-wrap';
 
-            newYesBtn.addEventListener('click', () => {
-                closeConfirmDialog();
-                onConfirm();
-            });
+            // Parse the flag reason to format it nicely
+            if (flagReason.includes('Prohibited content:')) {
+                // Extract the prohibited words and message
+                const lines = flagReason.split('\n');
+                const prohibitedLine = lines[0]; // "Prohibited content: 'word1', 'word2'"
+                const messageStart = flagReason.indexOf('Full message:');
+
+                if (messageStart !== -1) {
+                    let fullMessage = flagReason.substring(messageStart + 'Full message:'.length).trim();
+
+                    // Extract just the words from the prohibited line
+                    const wordsMatch = prohibitedLine.match(/Prohibited content: (.+)/);
+                    const words = wordsMatch ? wordsMatch[1] : 'unknown';
+
+                    // Extract individual prohibited words from the list
+                    const prohibitedWordsArray = words.match(/'([^']+)'/g);
+                    if (prohibitedWordsArray) {
+                        // Highlight each prohibited word in the message with yellow color
+                        prohibitedWordsArray.forEach(wordWithQuotes => {
+                            const word = wordWithQuotes.replace(/'/g, ''); // Remove quotes
+                            const regex = new RegExp(`(${word})`, 'gi');
+                            fullMessage = fullMessage.replace(regex, '<span style="color: #ffaa00; font-weight: 600;">$1</span>');
+                        });
+                    }
+
+                    // Format nicely
+                    reasonElement.innerHTML = `<strong>Prohibited Words Used:</strong><br>${words}<br><br><strong>Full Message:</strong><br>${fullMessage.replace(/\n/g, '<br>')}`;
+                } else {
+                    reasonElement.textContent = flagReason;
+                }
+            } else {
+                reasonElement.textContent = flagReason;
+            }
+
+            document.getElementById('flagging-dialog').classList.add('active');
         }
 
-        function closeConfirmDialog() {
-            document.getElementById('confirm-dialog').classList.remove('active');
+        function closeFlaggingDialog() {
+            document.getElementById('flagging-dialog').classList.remove('active');
+        }
+
+        async function confirmUnflag() {
+            if (!currentUser) return;
+
+            try {
+                const response = await fetch(`/api/admin/unflag/${currentUser.id}`, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('User unflagged successfully');
+                    closeFlaggingDialog();
+                    await selectUser(currentUser.id, { currentTarget: document.querySelector('.user-item.selected') });
+                    loadUsers();
+                }
+            } catch (error) {
+                console.error('Error unflagging user:', error);
+                alert('Error unflagging user: ' + error);
+            }
         }
 
         // Load users on page load (no filters = all users)

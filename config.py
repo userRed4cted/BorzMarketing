@@ -36,7 +36,7 @@ SUBSCRIPTION_PLANS = {
         'message_limit': -1,  # -1 means unlimited
         'usage_type': 'amount',  # 'allowance' or 'amount'
         'allowance_period': 'monthly',  # Only used if usage_type is 'allowance'
-        'glow_color': 'rgba(2188, 83, 207, 0.6)',
+        'glow_color': 'rgba(218, 83, 207, 0.6)',
         'savings_text': '$12.50 per month',  # Optional: Custom savings text
         'button_text': 'Subscribe'  # Button text (default: 'Join with Card')
     }
@@ -98,30 +98,30 @@ BUSINESS_PLANS = {
         'price_yearly': 195,  # Yearly total price in dollars
         'features': [
             '5000 message posts per week across all members',
-            'Up to 3 team members'
+            'Up to 15 team members'
         ],
         'message_limit': 5000,
         'usage_type': 'allowance',  # 'allowance' or 'amount'
         'allowance_period': 'weekly',  # 'daily', 'weekly', 'monthly'
-        'max_members': 3,  # Maximum number of team members
+        'max_members': 15,  # Maximum number of team members
         'glow_color': 'rgba(255, 255, 255, 0.6)',  # Gold glow effect
         'savings_text': '$16.25 per month',  # Optional: Custom savings text
         'button_text': 'Subscribe'  # Button text
     },
     'business_pro': {
-        'name': 'Business Pro',
-        'price_monthly': 35,
-        'price_yearly': 372,
+        'name': 'Enterprise',
+        'price_monthly': 30,
+        'price_yearly': 300,
         'features': [
             'Unlimited message posts',
-            'Up to 25 team members'
+            'Up to 40 team members'
         ],
         'message_limit': -1,  # -1 means unlimited
         'usage_type': 'amount',
         'allowance_period': 'monthly',
-        'max_members': 25,  # Maximum number of team members
+        'max_members': 40,  # Maximum number of team members
         'glow_color': 'rgba(255, 165, 0, 0.8)',  # Orange-gold glow
-        'savings_text': '$31 per month',
+        'savings_text': '$25 per month',
         'button_text': 'Subscribe'
     }
 }

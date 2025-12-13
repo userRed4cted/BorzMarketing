@@ -43,7 +43,7 @@
             <div class="dropdown-menu" id="dropdown-menu">
                 <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
                 <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
-                {% if plan_status and plan_status.has_plan %}
+                {% if plan_status and plan_status.has_plan and not (plan_status.plan_id and plan_status.plan_id.startswith('business_')) %}
                     <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                 {% endif %}
                 {% if has_business %}
@@ -86,7 +86,7 @@
                                 <div class="usage-label">
                                     Allowance
                                     {% if plan_status.has_plan and plan_status.usage_type == 'allowance' %}
-                                        (per {{ plan_status.allowance_period }})
+                                        (per {% if plan_status.allowance_period == 'weekly' %}week{% elif plan_status.allowance_period == 'monthly' %}month{% elif plan_status.allowance_period == 'daily' %}day{% endif %})
                                     {% elif plan_status.has_plan and plan_status.usage_type == 'amount' %}
                                         (total)
                                     {% endif %}
@@ -145,7 +145,7 @@
                                 <div class="usage-label">
                                     Allowance
                                     {% if business_plan_status.usage_type == 'allowance' %}
-                                        (per {{ business_plan_status.allowance_period }})
+                                        (per {% if business_plan_status.allowance_period == 'weekly' %}week{% elif business_plan_status.allowance_period == 'monthly' %}month{% elif business_plan_status.allowance_period == 'daily' %}day{% endif %})
                                     {% elif business_plan_status.usage_type == 'amount' %}
                                         (total)
                                     {% endif %}
@@ -305,6 +305,31 @@
                             {% endif %}
                         </div>
                     </div>
+
+                    <!-- Teams Panel -->
+                    <div class="settings-panel">
+                        <div class="settings-panel-header">Teams</div>
+                        <div class="settings-panel-content" style="display: flex; flex-direction: column; flex: 1; height: 100%;">
+                            <!-- Team Invitations List -->
+                            <div id="team-invitations-container" style="flex: 1; overflow-y: auto; max-height: 450px; margin-bottom: 1.5rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                    <div style="color: #dcddde; font-weight: 500; font-size: 0.9rem;">Team Invitations</div>
+                                    <button id="clearAllInvitationsBtn" class="auth-btn login-btn" style="padding: 0.4rem 1rem; font-size: 0.85rem; opacity: 0.5; cursor: not-allowed;" disabled>Clear All</button>
+                                </div>
+                                <div id="invitations-list" style="display: flex; flex-direction: column; gap: 0.75rem; padding-bottom: 1rem;">
+                                    <!-- Invitations will be loaded here -->
+                                    <div style="color: #8e9297; font-size: 0.9rem; text-align: center; padding: 2rem;">No pending invitations</div>
+                                </div>
+                            </div>
+
+                            <!-- Current Team Status -->
+                            <div id="current-team-container" style="margin-top: auto; padding-top: 1rem; padding-bottom: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                                <div style="color: #dcddde; font-weight: 500; font-size: 0.9rem; margin-bottom: 0.5rem;">Current Team</div>
+                                <div id="current-team-status" style="color: #8e9297; font-size: 0.85rem; margin-bottom: 1rem;">Not in any team</div>
+                                <button id="leaveTeamBtn" class="delete-account-btn" style="opacity: 0.5; cursor: not-allowed;" disabled>Leave Team</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -385,7 +410,7 @@
                 });
             });
 
-            // Countdown timer functionality
+            // Countdown timer functionality for personal usage
             const countdownElement = document.getElementById('resetCountdown');
             if (countdownElement) {
                 const resetTime = countdownElement.getAttribute('data-reset-time');
@@ -409,6 +434,32 @@
                 // Update immediately and then every minute
                 updateCountdown();
                 setInterval(updateCountdown, 60000);
+            }
+
+            // Countdown timer functionality for business usage
+            const businessCountdownElement = document.getElementById('businessResetCountdown');
+            if (businessCountdownElement) {
+                const resetTime = businessCountdownElement.getAttribute('data-reset-time');
+
+                function updateBusinessCountdown() {
+                    const now = new Date();
+                    const reset = new Date(resetTime);
+                    const diff = reset - now;
+
+                    if (diff <= 0) {
+                        businessCountdownElement.textContent = 'Resetting...';
+                        return;
+                    }
+
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+                    businessCountdownElement.textContent = `${hours}h ${minutes}m`;
+                }
+
+                // Update immediately and then every minute
+                updateBusinessCountdown();
+                setInterval(updateBusinessCountdown, 60000);
             }
 
             // Delete account functionality with persistent confirmation
@@ -541,6 +592,199 @@
                 });
             {% endif %}
         }
+
+        // Team invitations functionality
+        let acceptedInvitation = false;
+
+        function loadTeamInvitations() {
+            fetch('/api/team/invitations')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const invitationsList = document.getElementById('invitations-list');
+                        const clearAllBtn = document.getElementById('clearAllInvitationsBtn');
+
+                        if (data.invitations && data.invitations.length > 0) {
+                            invitationsList.innerHTML = '';
+                            clearAllBtn.disabled = false;
+                            clearAllBtn.style.opacity = '1';
+                            clearAllBtn.style.cursor = 'pointer';
+                            clearAllBtn.style.background = 'transparent';
+
+                            data.invitations.forEach(invitation => {
+                                const invitationCard = document.createElement('div');
+                                invitationCard.style.cssText = 'background: #2c2f33; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem;';
+
+                                // Avatar
+                                const avatarDiv = document.createElement('div');
+                                if (invitation.owner_avatar) {
+                                    avatarDiv.innerHTML = `<img src="https://cdn.discordapp.com/avatars/${invitation.owner_discord_id}/${invitation.owner_avatar}.png" style="width: 40px; height: 40px; border-radius: 50%;">`;
+                                } else {
+                                    avatarDiv.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">${invitation.owner_username[0].toUpperCase()}</div>`;
+                                }
+
+                                // Info
+                                const infoDiv = document.createElement('div');
+                                infoDiv.style.cssText = 'flex: 1;';
+                                infoDiv.innerHTML = `
+                                    <div style="color: #dcddde; font-weight: 500;">${invitation.owner_username}</div>
+                                    <div style="color: #8e9297; font-size: 0.85rem;">${invitation.owner_discord_id}</div>
+                                `;
+
+                                // Actions
+                                const actionsDiv = document.createElement('div');
+                                actionsDiv.style.cssText = 'display: flex; gap: 0.5rem;';
+
+                                const joinBtn = document.createElement('button');
+                                joinBtn.textContent = 'Join team';
+                                joinBtn.className = 'team-action-btn';
+                                joinBtn.style.cssText = 'padding: 0.4rem 1rem; background: #5865f2; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 0.85rem;';
+                                joinBtn.dataset.memberId = invitation.id;
+
+                                const denyBtn = document.createElement('button');
+                                denyBtn.innerHTML = '✕';
+                                denyBtn.className = 'team-deny-btn';
+                                denyBtn.style.cssText = 'padding: 0.4rem 0.6rem; background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; color: #e74c3c; cursor: pointer; font-size: 0.9rem;';
+                                denyBtn.dataset.memberId = invitation.id;
+
+                                if (acceptedInvitation) {
+                                    joinBtn.disabled = true;
+                                    joinBtn.style.opacity = '0.5';
+                                    joinBtn.style.cursor = 'not-allowed';
+                                }
+
+                                joinBtn.addEventListener('click', () => acceptInvitation(invitation.id));
+                                denyBtn.addEventListener('click', () => denyInvitation(invitation.id));
+
+                                actionsDiv.appendChild(joinBtn);
+                                actionsDiv.appendChild(denyBtn);
+
+                                invitationCard.appendChild(avatarDiv);
+                                invitationCard.appendChild(infoDiv);
+                                invitationCard.appendChild(actionsDiv);
+
+                                invitationsList.appendChild(invitationCard);
+                            });
+                        } else {
+                            invitationsList.innerHTML = '<div style="color: #8e9297; font-size: 0.9rem; text-align: center; padding: 2rem;">No pending invitations</div>';
+                            clearAllBtn.disabled = true;
+                            clearAllBtn.style.opacity = '0.5';
+                            clearAllBtn.style.cursor = 'not-allowed';
+                        }
+                    }
+                })
+                .catch(error => console.error('Error loading invitations:', error));
+        }
+
+        function acceptInvitation(memberId) {
+            if (confirm('Accept this team invitation? All other pending invitations will be denied.')) {
+                fetch(`/api/team/invitation/accept/${memberId}`, { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            acceptedInvitation = true;
+                            alert('Team invitation accepted!');
+                            loadTeamInvitations();
+                            loadCurrentTeam();
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    })
+                    .catch(error => alert('Error accepting invitation: ' + error));
+            }
+        }
+
+        function denyInvitation(memberId) {
+            fetch(`/api/team/invitation/deny/${memberId}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadTeamInvitations();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => alert('Error denying invitation: ' + error));
+        }
+
+        function loadCurrentTeam() {
+            // This will be shown via server-side rendering or API call
+            // For now, we can add a simple check
+            fetch('/api/team/invitations')
+                .then(response => response.json())
+                .then(data => {
+                    const currentTeamStatus = document.getElementById('current-team-status');
+                    const leaveTeamBtn = document.getElementById('leaveTeamBtn');
+
+                    // Check if user has accepted any invitation
+                    if (acceptedInvitation) {
+                        currentTeamStatus.textContent = 'Member of a team';
+                        currentTeamStatus.style.color = '#5865f2';
+                        leaveTeamBtn.disabled = false;
+                        leaveTeamBtn.style.opacity = '1';
+                        leaveTeamBtn.style.cursor = 'pointer';
+                    }
+                });
+        }
+
+        // Clear all invitations
+        document.getElementById('clearAllInvitationsBtn').addEventListener('click', () => {
+            if (confirm('Clear all pending team invitations?')) {
+                fetch('/api/team/invitations/clear', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            loadTeamInvitations();
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    })
+                    .catch(error => alert('Error clearing invitations: ' + error));
+            }
+        });
+
+        // Leave team
+        let leaveTeamConfirmed = false;
+        document.getElementById('leaveTeamBtn').addEventListener('click', () => {
+            if (!leaveTeamConfirmed) {
+                if (confirm('Leave your current team? You will need to accept a new invitation to join another team.')) {
+                    leaveTeamConfirmed = true;
+                    document.getElementById('leaveTeamBtn').textContent = 'Confirm Leave';
+                    document.getElementById('leaveTeamBtn').style.background = '#c0392b';
+                }
+            } else {
+                fetch('/api/team/leave', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Left team successfully');
+                            acceptedInvitation = false;
+                            leaveTeamConfirmed = false;
+                            document.getElementById('leaveTeamBtn').textContent = 'Leave Team';
+                            document.getElementById('leaveTeamBtn').disabled = true;
+                            document.getElementById('leaveTeamBtn').style.opacity = '0.5';
+                            document.getElementById('leaveTeamBtn').style.cursor = 'not-allowed';
+                            document.getElementById('leaveTeamBtn').style.background = '';
+                            document.getElementById('current-team-status').textContent = 'Not in any team';
+                            document.getElementById('current-team-status').style.color = '#8e9297';
+                            loadTeamInvitations();
+                        } else {
+                            alert('Error: ' + data.error);
+                            leaveTeamConfirmed = false;
+                            document.getElementById('leaveTeamBtn').textContent = 'Leave Team';
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error leaving team: ' + error);
+                        leaveTeamConfirmed = false;
+                        document.getElementById('leaveTeamBtn').textContent = 'Leave Team';
+                    });
+            }
+        });
+
+        // Load invitations on page load
+        loadTeamInvitations();
+        loadCurrentTeam();
     </script>
 </body>
 </html>
