@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Management - Borz Marketing Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='tab_enforcement.js') }}"></script>
+</head>
+<body>
+    <div class="panel">
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-left">
+                    <div class="menu-icon" id="menu-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </div>
+                    <div class="navbar-text">
+                        <h1 class="navbar-title">Business Team Management</h1>
+                        <p class="navbar-subtitle">Manage your team members and set the shared advertising message</p>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="user-info">
+                        {% if user.avatar %}
+                            <img src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" alt="{{ user.username }}" class="user-avatar">
+                        {% else %}
+                            <div class="user-avatar-placeholder">{{ user.username[0].upper() }}</div>
+                        {% endif %}
+                        <div class="user-details">
+                            <div class="username">{{ user.username }}</div>
+                            <div class="user-id">{{ user.id }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dropdown Menu -->
+            <div class="dropdown-menu" id="dropdown-menu">
+                <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
+                <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
+                <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
+                {% if has_business %}
+                <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
+                <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
+                {% endif %}
+                <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
+                <div class="dropdown-divider"></div>
+                <a href="https://discord.gg/KWt6rvCukp" target="_blank" class="dropdown-item discord-item">Discord Server</a>
+                <a href="{{ url_for('logout') }}" class="dropdown-item logout-item">Logout</a>
+            </div>
+        </nav>
+
+        <div class="panel-container">
+            <div class="main-layout">
+                <!-- Left Panel: Team Members -->
+                <div class="selection-panel">
+                    <div class="unified-header">
+                        <div class="header-section">
+                            <div class="panel-header">Team Members ({{ members|length }}/{{ team.max_members }})</div>
+                        </div>
+                    </div>
+
+                    <!-- Add Member Section -->
+                    <div class="servers-section" style="padding: 0.75rem 1rem 0 1rem; margin-bottom: 0;">
+                        <div class="panel-subheader" style="margin-bottom: 0.5rem; color: #dcddde;">Add Team Member</div>
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0;">
+                            <input type="text" id="member-discord-id" class="search-input" placeholder="Enter Discord User ID..." style="flex: 1;">
+                            <button id="add-member-btn" class="send-button" style="padding: 0 1rem; height: 40px; min-width: 80px;">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Team Members List -->
+                    <div class="channels-section" style="flex: 1; display: flex; flex-direction: column; min-height: 0; margin-top: 0rem; padding-top: 0;">
+                        <div class="panel-header" style="padding: 0 1rem; margin-bottom: 0.5rem; margin-top: 0;">Team Members</div>
+                        <div id="members-list" class="channels-list">
+                            {% if members|length == 0 %}
+                                <div class="no-selection">No team members yet</div>
+                            {% else %}
+                                {% for member in members %}
+                                    <div class="team-member-item" data-discord-id="{{ member.member_discord_id }}">
+                                        <div class="member-avatar">
+                                            {% if member.member_avatar %}
+                                                <img src="https://cdn.discordapp.com/avatars/{{ member.member_discord_id }}/{{ member.member_avatar }}.png" alt="{{ member.member_username }}">
+                                            {% else %}
+                                                <div class="member-avatar-placeholder">{{ member.member_username[0].upper() if member.member_username else '?' }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="member-info">
+                                            <div class="member-username">{{ member.member_username or 'Unknown User' }}</div>
+                                            <div class="member-discord-id">ID: {{ member.member_discord_id }}</div>
+                                        </div>
+                                        {% if member.user_id %}
+                                            <span class="signup-tag signup-tag-yes">Signed Up</span>
+                                        {% else %}
+                                            <span class="signup-tag signup-tag-no">Not Signed Up</span>
+                                        {% endif %}
+                                        <button class="member-remove-btn" data-discord-id="{{ member.member_discord_id }}">✕</button>
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Team Message -->
+                <div class="action-panel">
+                    <div class="unified-header">
+                        <div class="header-section">
+                            <div class="panel-header">Team Advertisement Message</div>
+                        </div>
+                    </div>
+
+                    <!-- Message Section -->
+                    <div class="message-section" style="display: flex; flex-direction: column; padding: 1rem; gap: 1rem; flex: 0.5;">
+                        <div class="panel-subheader" style="margin-bottom: 0.5rem; color: #dcddde;">
+                            This message will be used by all team members when sending from Business Panel
+                        </div>
+                        <textarea id="team-message-input" class="message-input" placeholder="Enter the message your team will be using here..." maxlength="2000" style="flex: 1; margin-bottom: 0.5rem;">{{ team.team_message or '' }}</textarea>
+                        <div class="message-footer">
+                            <span class="char-count"><span id="char-count">{{ (team.team_message or '')|length }}</span>/2000</span>
+                            <button id="set-message-btn" class="send-button">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                Set Team Message
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Member Statistics Section -->
+                    <div class="member-stats-section" style="display: flex; flex-direction: column; gap: 0.75rem; flex: 0.5; min-height: 0;">
+                        <div class="panel-header" style="padding: 0 1rem; margin-bottom: 0.5rem; margin-top: 0.75rem;">Team Member Statistics</div>
+                        <div id="member-stats-list" class="member-stats-list">
+                            {% if member_stats|length == 0 %}
+                                <div class="no-selection">No team members yet</div>
+                            {% else %}
+                                {% for stat in member_stats %}
+                                    <div class="member-stat-item">
+                                        <div class="member-stat-avatar">
+                                            {% if stat.member_avatar %}
+                                                <img src="https://cdn.discordapp.com/avatars/{{ stat.member_discord_id }}/{{ stat.member_avatar }}.png" alt="{{ stat.member_username }}">
+                                            {% else %}
+                                                <div class="member-avatar-placeholder">{{ stat.member_username[0].upper() if stat.member_username else '?' }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="member-stat-info">
+                                            <div class="member-stat-username">{{ stat.member_username or 'Unknown User' }}</div>
+                                            <div class="member-stat-id">ID: {{ stat.member_discord_id }}</div>
+                                        </div>
+                                        <div class="member-stat-usage">
+                                            <div class="stat-number">{{ stat.business_all_time_sent }}</div>
+                                            <div class="stat-label">Adverts Sent</div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .team-member-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: rgba(47, 49, 54, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .team-member-item:hover {
+            background: rgba(47, 49, 54, 0.8);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .member-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .member-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .member-avatar-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+
+        .member-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .member-username {
+            color: #dcddde;
+            font-weight: 500;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .member-discord-id {
+            color: #949ba4;
+            font-size: 0.8rem;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .signup-tag {
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .signup-tag-yes {
+            background: rgba(88, 101, 242, 0.2);
+            color: #5865f2;
+            border: 1px solid rgba(88, 101, 242, 0.4);
+        }
+
+        .signup-tag-no {
+            background: rgba(255, 255, 255, 0.1);
+            color: #949ba4;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .member-remove-btn {
+            padding: 0.4rem 0.75rem;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            color: #DF281F;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            font-weight: 600;
+        }
+
+        .member-remove-btn:hover {
+            background: rgba(223, 40, 31, 0.2);
+            transform: scale(1.1);
+        }
+
+        .panel-subheader {
+            font-size: 0.9rem;
+            color: #949ba4;
+        }
+
+        /* Member Statistics Styles */
+        .member-stats-list {
+            background: transparent;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            min-height: 0;
+        }
+
+        .member-stats-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .member-stats-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .member-stats-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        .member-stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: rgba(47, 49, 54, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .member-stat-item:hover {
+            background: rgba(47, 49, 54, 0.8);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .member-stat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .member-stat-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .member-stat-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .member-stat-username {
+            color: #dcddde;
+            font-weight: 500;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .member-stat-id {
+            color: #949ba4;
+            font-size: 0.8rem;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .member-stat-usage {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: #121215;
+            border-radius: 6px;
+            min-width: 80px;
+        }
+
+        .stat-number {
+            color: #5865f2;
+            font-weight: 700;
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+
+        .stat-label {
+            color: #949ba4;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 0.25rem;
+        }
+    </style>
+
+    <script>
+        // Prevent page from being stored in cache
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const menuIcon = document.getElementById('menu-icon');
+            const dropdownMenu = document.getElementById('dropdown-menu');
+            const memberDiscordIdInput = document.getElementById('member-discord-id');
+            const addMemberBtn = document.getElementById('add-member-btn');
+            const membersList = document.getElementById('members-list');
+            const teamMessageInput = document.getElementById('team-message-input');
+            const setMessageBtn = document.getElementById('set-message-btn');
+            const charCount = document.getElementById('char-count');
+
+            const maxMembers = {{ team.max_members }};
+            let currentMemberCount = {{ members|length }};
+
+            // Dropdown menu toggle
+            if (menuIcon) {
+                menuIcon.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    dropdownMenu.classList.toggle('show');
+                });
+            }
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (dropdownMenu && !dropdownMenu.contains(e.target) && menuIcon && !menuIcon.contains(e.target)) {
+                    dropdownMenu.classList.remove('show');
+                }
+            });
+
+            // Character count for team message
+            if (teamMessageInput && charCount) {
+                teamMessageInput.addEventListener('input', function() {
+                    charCount.textContent = this.value.length;
+                });
+            }
+
+            // Add team member
+            if (addMemberBtn && memberDiscordIdInput) {
+                addMemberBtn.addEventListener('click', async function() {
+                    const discordId = memberDiscordIdInput.value.trim();
+
+                    if (!discordId) {
+                        alert('Please enter a Discord User ID');
+                        return;
+                    }
+
+                    // Validate Discord ID format (18-19 digits)
+                    if (!/^\d{17,19}$/.test(discordId)) {
+                        alert('Invalid Discord ID format. Discord IDs are 17-19 digit numbers.');
+                        return;
+                    }
+
+                    if (currentMemberCount >= maxMembers) {
+                        alert(`Team is full. Maximum ${maxMembers} members allowed for your plan.`);
+                        return;
+                    }
+
+                    addMemberBtn.disabled = true;
+                    addMemberBtn.textContent = 'Adding...';
+
+                    try {
+                        const response = await fetch('/api/business/add-member', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                discord_id: discordId
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            window.location.reload();
+                        } else {
+                            alert(data.error || 'Failed to add team member');
+                        }
+                    } catch (error) {
+                        console.error('Error adding member:', error);
+                        alert('Failed to add team member. Please try again.');
+                    } finally {
+                        addMemberBtn.disabled = false;
+                        addMemberBtn.textContent = 'Add';
+                    }
+                });
+
+                // Allow Enter key to add member
+                memberDiscordIdInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        addMemberBtn.click();
+                    }
+                });
+            }
+
+            // Remove team member
+            document.querySelectorAll('.member-remove-btn').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const discordId = this.dataset.discordId;
+
+                    this.disabled = true;
+
+                    try {
+                        const response = await fetch('/api/business/remove-member', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                discord_id: discordId
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            window.location.reload();
+                        } else {
+                            alert(data.error || 'Failed to remove team member');
+                            this.disabled = false;
+                        }
+                    } catch (error) {
+                        console.error('Error removing member:', error);
+                        alert('Failed to remove team member. Please try again.');
+                        this.disabled = false;
+                    }
+                });
+            });
+
+            // Set team message
+            if (setMessageBtn && teamMessageInput) {
+                setMessageBtn.addEventListener('click', async function() {
+                    const message = teamMessageInput.value.trim();
+
+                    if (!message) {
+                        alert('Please enter a team message');
+                        return;
+                    }
+
+                    // Check for filtered content before saving
+                    const filteredWords = {{ BLACKLISTED_WORDS|tojson }};
+                    const messageLower = message.toLowerCase();
+                    let foundWord = null;
+
+                    for (const word of filteredWords) {
+                        if (messageLower.includes(word.toLowerCase())) {
+                            foundWord = word;
+                            break;
+                        }
+                    }
+
+                    if (foundWord) {
+                        alert(`⚠️ Message contains prohibited content: "${foundWord}"\n\nPlease remove this content from your message before saving.`);
+                        return; // Stop execution
+                    }
+
+                    setMessageBtn.disabled = true;
+                    const originalHtml = setMessageBtn.innerHTML;
+                    setMessageBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinner"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M12 2 A10 10 0 0 1 22 12" stroke-linecap="round"></path></svg> Saving...';
+
+                    try {
+                        const response = await fetch('/api/business/set-team-message', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                message: message
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            alert('Team message updated successfully!\n\nAll team members will now use this message.');
+                        } else {
+                            alert(data.error || 'Failed to update team message');
+                        }
+                    } catch (error) {
+                        console.error('Error setting team message:', error);
+                        alert('Failed to update team message. Please try again.');
+                    } finally {
+                        setMessageBtn.disabled = false;
+                        setMessageBtn.innerHTML = originalHtml;
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

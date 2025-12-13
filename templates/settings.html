@@ -46,6 +46,10 @@
                 {% if plan_status and plan_status.has_plan %}
                     <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                 {% endif %}
+                {% if has_business %}
+                <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
+                <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
+                {% endif %}
                 <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
                 <div class="dropdown-divider"></div>
                 <a href="https://discord.gg/KWt6rvCukp" target="_blank" class="dropdown-item discord-item">Discord Server</a>
@@ -60,22 +64,54 @@
                     <!-- Usage Panel -->
                     <div class="settings-panel">
                         <div class="settings-panel-header">Usage</div>
-                        <div class="settings-panel-content">
+
+                        <!-- Personal/Business Toggle -->
+                        {% if has_business %}
+                        <div style="display: flex; gap: 1.5rem; margin: 1rem 0; padding-bottom: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="usage-view" value="personal" checked style="cursor: pointer;">
+                                <span style="color: #dcddde; font-weight: 500;">Personal</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="usage-view" value="business" style="cursor: pointer;">
+                                <span style="color: #dcddde; font-weight: 500;">Business</span>
+                            </label>
+                        </div>
+                        {% endif %}
+
+                        <div class="settings-panel-content" id="personal-usage" {% if has_business %}style="display: block;"{% endif %}>
                             <div class="usage-stat">
-                                <div class="usage-label">Allowance</div>
+                                <div class="usage-label">
+                                    Allowance
+                                    {% if plan_status.has_plan and plan_status.usage_type == 'allowance' %}
+                                        (per {{ plan_status.allowance_period }})
+                                    {% elif plan_status.has_plan and plan_status.usage_type == 'amount' %}
+                                        (total)
+                                    {% endif %}
+                                </div>
                                 <div class="usage-value">
                                     {% if plan_status.is_unlimited %}
                                         inf
                                     {% elif plan_status.has_plan %}
-                                        {{ plan_status.messages_remaining }}
+                                        {{ plan_status.message_limit }}
                                     {% else %}
                                         0
                                     {% endif %}
                                 </div>
                             </div>
                             <div class="usage-stat">
-                                <div class="usage-label">Advertisements Sent</div>
-                                <div class="usage-value">{{ sent_count }}</div>
+                                <div class="usage-label">Advertisements Sent (with current plan)</div>
+                                <div class="usage-value">
+                                    {% if plan_status.has_plan %}
+                                        {{ plan_status.messages_sent }}
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="usage-stat">
+                                <div class="usage-label">All Time Ads Sent</div>
+                                <div class="usage-value">{{ plan_status.all_time_sent }}</div>
                             </div>
                             <div class="usage-stat">
                                 <div class="usage-label">Usage Percentage</div>
@@ -99,6 +135,58 @@
                             </div>
                             {% endif %}
                         </div>
+
+                        <!-- Business Usage Section -->
+                        {% if has_business and business_plan_status %}
+                        <div class="settings-panel-content" id="business-usage" style="display: none;">
+                            <div class="usage-stat">
+                                <div class="usage-label">
+                                    Allowance
+                                    {% if business_plan_status.usage_type == 'allowance' %}
+                                        (per {{ business_plan_status.allowance_period }})
+                                    {% elif business_plan_status.usage_type == 'amount' %}
+                                        (total)
+                                    {% endif %}
+                                </div>
+                                <div class="usage-value">
+                                    {% if business_plan_status.is_unlimited %}
+                                        inf
+                                    {% else %}
+                                        {{ business_plan_status.message_limit }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="usage-stat">
+                                <div class="usage-label">Advertisements Sent (with current plan)</div>
+                                <div class="usage-value">{{ business_plan_status.messages_sent }}</div>
+                            </div>
+                            <div class="usage-stat">
+                                <div class="usage-label">All Time Ads Sent (across all team members)</div>
+                                <div class="usage-value">{{ business_plan_status.all_time_sent }}</div>
+                            </div>
+                            <div class="usage-stat">
+                                <div class="usage-label">Usage Percentage</div>
+                                <div class="usage-value">
+                                    {% if business_plan_status.is_unlimited %}
+                                        0%
+                                    {% elif business_plan_status.message_limit > 0 %}
+                                        {{ ((business_plan_status.messages_sent / business_plan_status.message_limit) * 100)|round(0)|int }}%
+                                    {% else %}
+                                        0%
+                                    {% endif %}
+                                </div>
+                                <div class="usage-progress-bar">
+                                    <div class="usage-progress-fill" style="width: {% if business_plan_status.is_unlimited %}0{% elif business_plan_status.message_limit > 0 %}{{ ((business_plan_status.messages_sent / business_plan_status.message_limit) * 100)|round(0)|int }}{% else %}0{% endif %}%;"></div>
+                                </div>
+                            </div>
+                            {% if business_plan_status.usage_type == 'allowance' and business_plan_status.next_reset %}
+                            <div class="usage-stat">
+                                <div class="usage-label">Limit Resets In</div>
+                                <div class="usage-value" id="businessResetCountdown" data-reset-time="{{ business_plan_status.next_reset }}">Calculating...</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
 
                     <!-- General Settings Panel -->
@@ -143,7 +231,7 @@
                                     <!-- Status at top -->
                                     <div class="usage-stat">
                                         <div class="usage-label">Status</div>
-                                        <div class="usage-value" style="color: #4caf50;">Active</div>
+                                        <div class="usage-value" style="color: #5865f2;">Active</div>
                                     </div>
 
                                     <!-- Current Plan -->
@@ -185,7 +273,7 @@
                                     <!-- Status -->
                                     <div class="usage-stat">
                                         <div class="usage-label">Status</div>
-                                        <div class="usage-value" style="color: #ff6b6b;">No Active Plan</div>
+                                        <div class="usage-value" style="color: #121215;">No Active Plan</div>
                                     </div>
 
                                     <!-- Current Plan -->
@@ -237,6 +325,23 @@
             if (dropdownMenu && !dropdownMenu.contains(e.target) && menuIcon && !menuIcon.contains(e.target)) {
                 dropdownMenu.classList.remove('show');
             }
+        });
+
+        // Personal/Business usage toggle
+        const usageViewRadios = document.querySelectorAll('input[name="usage-view"]');
+        const personalUsage = document.getElementById('personal-usage');
+        const businessUsage = document.getElementById('business-usage');
+
+        usageViewRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.value === 'personal') {
+                    if (personalUsage) personalUsage.style.display = 'block';
+                    if (businessUsage) businessUsage.style.display = 'none';
+                } else if (e.target.value === 'business') {
+                    if (personalUsage) personalUsage.style.display = 'none';
+                    if (businessUsage) businessUsage.style.display = 'block';
+                }
+            });
         });
 
         // Load and save message delay setting

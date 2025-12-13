@@ -15,7 +15,8 @@ SUBSCRIPTION_PLANS = {
         'price_monthly': 7,  # Monthly price in dollars
         'price_yearly': 75,  # Yearly total price in dollars (should show savings)
         'features': [
-            '1000 message posts per week limit'
+            '1000 message posts per week limit',
+            'Personal use'
         ],
         'message_limit': 1000,  # -1 for unlimited
         'usage_type': 'allowance',  # 'allowance' or 'amount'
@@ -29,7 +30,8 @@ SUBSCRIPTION_PLANS = {
         'price_monthly': 15,
         'price_yearly': 160,
         'features': [
-            'Unlimited message posts'
+            'Unlimited message posts',
+            'Personal use'
         ],
         'message_limit': -1,  # -1 means unlimited
         'usage_type': 'amount',  # 'allowance' or 'amount'
@@ -46,7 +48,8 @@ ONE_TIME_PLANS = {
         'name': '1 Day',
         'price': 2.50,  # One-time price in dollars
         'features': [
-            '50 message posts limit'
+            '50 message posts limit',
+            'Personal use'
         ],
         'message_limit': 50,
         'usage_type': 'amount',  # 'allowance' or 'amount'
@@ -60,7 +63,8 @@ ONE_TIME_PLANS = {
         'price': 5,
         'features': [
             '50 message posts limit per day',
-            'Daily Limit'
+            'Daily Limit',
+            'Personal use'
         ],
         'message_limit': 50,
         'usage_type': 'allowance',  # 'allowance' or 'amount'
@@ -74,7 +78,8 @@ ONE_TIME_PLANS = {
         'price': 7.50,
         'features': [
             '70 message posts limit per day',
-            'Daily Limit'
+            'Daily Limit',
+            'Personal use'
         ],
         'message_limit': 70,
         'usage_type': 'allowance',  # 'allowance' or 'amount'
@@ -82,6 +87,42 @@ ONE_TIME_PLANS = {
         'duration_days': 7,
         'glow_color': 'rgba(188, 83, 207, 0.6)',
         'button_text': 'Purchase'  # Button text (default: 'Join with Card')
+    }
+}
+
+# Business Plans (Subscription-based with business features)
+BUSINESS_PLANS = {
+    'business_starter': {
+        'name': 'Business Starter',
+        'price_monthly': 20,  # Monthly price in dollars
+        'price_yearly': 195,  # Yearly total price in dollars
+        'features': [
+            '5000 message posts per week across all members',
+            'Up to 3 team members'
+        ],
+        'message_limit': 5000,
+        'usage_type': 'allowance',  # 'allowance' or 'amount'
+        'allowance_period': 'weekly',  # 'daily', 'weekly', 'monthly'
+        'max_members': 3,  # Maximum number of team members
+        'glow_color': 'rgba(255, 255, 255, 0.6)',  # Gold glow effect
+        'savings_text': '$16.25 per month',  # Optional: Custom savings text
+        'button_text': 'Subscribe'  # Button text
+    },
+    'business_pro': {
+        'name': 'Business Pro',
+        'price_monthly': 35,
+        'price_yearly': 372,
+        'features': [
+            'Unlimited message posts',
+            'Up to 25 team members'
+        ],
+        'message_limit': -1,  # -1 means unlimited
+        'usage_type': 'amount',
+        'allowance_period': 'monthly',
+        'max_members': 25,  # Maximum number of team members
+        'glow_color': 'rgba(255, 165, 0, 0.8)',  # Orange-gold glow
+        'savings_text': '$31 per month',
+        'button_text': 'Subscribe'
     }
 }
 

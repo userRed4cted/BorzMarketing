@@ -54,6 +54,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             messages_sent INTEGER DEFAULT 0,
+            all_time_sent INTEGER DEFAULT 0,
             last_reset TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
@@ -72,11 +73,62 @@ def init_db():
         )
     ''')
 
+    # Business teams table (for business plan team management)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS business_teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_user_id INTEGER NOT NULL,
+            subscription_id INTEGER NOT NULL,
+            team_message TEXT,
+            max_members INTEGER DEFAULT 3,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (owner_user_id) REFERENCES users(id),
+            FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
+        )
+    ''')
+
+    # Business team members table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS business_team_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER NOT NULL,
+            member_discord_id TEXT NOT NULL,
+            member_username TEXT,
+            member_avatar TEXT,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (team_id) REFERENCES business_teams(id),
+            UNIQUE(team_id, member_discord_id)
+        )
+    ''')
+
     # Migration: Add message_delay column if it doesn't exist
     cursor.execute("PRAGMA table_info(user_data)")
     columns = [column[1] for column in cursor.fetchall()]
     if 'message_delay' not in columns:
         cursor.execute('ALTER TABLE user_data ADD COLUMN message_delay INTEGER DEFAULT 1000')
+
+    # Migration: Add all_time_sent column if it doesn't exist
+    cursor.execute("PRAGMA table_info(usage)")
+    usage_columns = [column[1] for column in cursor.fetchall()]
+    if 'all_time_sent' not in usage_columns:
+        cursor.execute('ALTER TABLE usage ADD COLUMN all_time_sent INTEGER DEFAULT 0')
+        # Initialize all_time_sent with current messages_sent values
+        cursor.execute('UPDATE usage SET all_time_sent = messages_sent WHERE all_time_sent = 0')
+
+    # Migration: Add business usage tracking columns
+    if 'business_messages_sent' not in usage_columns:
+        cursor.execute('ALTER TABLE usage ADD COLUMN business_messages_sent INTEGER DEFAULT 0')
+    if 'business_all_time_sent' not in usage_columns:
+        cursor.execute('ALTER TABLE usage ADD COLUMN business_all_time_sent INTEGER DEFAULT 0')
+    if 'business_last_reset' not in usage_columns:
+        cursor.execute('ALTER TABLE usage ADD COLUMN business_last_reset TEXT')
+
+    # Migration: Add business_selected_channels to user_data
+    cursor.execute("PRAGMA table_info(user_data)")
+    user_data_columns = [column[1] for column in cursor.fetchall()]
+    if 'business_selected_channels' not in user_data_columns:
+        cursor.execute('ALTER TABLE user_data ADD COLUMN business_selected_channels TEXT')
 
     conn.commit()
     conn.close()
@@ -325,7 +377,7 @@ def get_usage(user_id):
 def increment_usage(user_id):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('UPDATE usage SET messages_sent = messages_sent + 1 WHERE user_id = ?', (user_id,))
+    cursor.execute('UPDATE usage SET messages_sent = messages_sent + 1, all_time_sent = all_time_sent + 1 WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
 
@@ -425,11 +477,14 @@ def get_plan_status(user_id):
     subscription = get_active_subscription(user_id)
 
     if not subscription:
+        usage = get_usage(user_id)
+        all_time_sent = usage['all_time_sent'] if usage else 0
         return {
             'has_plan': False,
             'plan_name': 'No Plan',
             'message_limit': 0,
             'messages_sent': 0,
+            'all_time_sent': all_time_sent,
             'messages_remaining': 0,
             'is_unlimited': False,
             'expires_at': None,
@@ -441,11 +496,14 @@ def get_plan_status(user_id):
         end_date = datetime.fromisoformat(subscription['end_date'])
         if datetime.now() > end_date:
             cancel_subscription(user_id)
+            usage = get_usage(user_id)
+            all_time_sent = usage['all_time_sent'] if usage else 0
             return {
                 'has_plan': False,
                 'plan_name': 'Expired',
                 'message_limit': 0,
                 'messages_sent': 0,
+                'all_time_sent': all_time_sent,
                 'messages_remaining': 0,
                 'is_unlimited': False,
                 'expires_at': None,
@@ -457,6 +515,7 @@ def get_plan_status(user_id):
 
     usage = get_usage(user_id)
     messages_sent = usage['messages_sent'] if usage else 0
+    all_time_sent = usage['all_time_sent'] if usage else 0
 
     is_unlimited = subscription['message_limit'] == -1
     remaining = -1 if is_unlimited else max(0, subscription['message_limit'] - messages_sent)
@@ -486,6 +545,7 @@ def get_plan_status(user_id):
         'billing_period': subscription.get('billing_period'),
         'message_limit': subscription['message_limit'],
         'messages_sent': messages_sent,
+        'all_time_sent': all_time_sent,
         'messages_remaining': remaining,
         'is_unlimited': is_unlimited,
         'usage_type': subscription['usage_type'],
@@ -494,6 +554,248 @@ def get_plan_status(user_id):
         'started_at': subscription['start_date'],
         'next_reset': next_reset
     }
+
+def get_business_plan_status(team_id, owner_user_id):
+    """
+    Get business plan status with aggregated team member usage.
+    Shows total usage across all team members for business plans.
+    """
+    # Get the base plan status from the owner
+    plan_status = get_plan_status(owner_user_id)
+
+    if not plan_status['has_plan']:
+        return plan_status
+
+    # Get all team member stats
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get owner's user_id for the team query
+    cursor.execute('''
+        SELECT btm.member_discord_id
+        FROM business_team_members btm
+        WHERE btm.team_id = ?
+    ''', (team_id,))
+    member_discord_ids = [row[0] for row in cursor.fetchall()]
+
+    # Also include the owner's Discord ID
+    cursor.execute('SELECT discord_id FROM users WHERE id = ?', (owner_user_id,))
+    owner_row = cursor.fetchone()
+    if owner_row:
+        member_discord_ids.append(owner_row[0])
+
+    # Get total business usage across all team members
+    total_business_all_time = 0
+    total_business_messages_sent = 0
+
+    for discord_id in member_discord_ids:
+        cursor.execute('SELECT id FROM users WHERE discord_id = ?', (discord_id,))
+        user_row = cursor.fetchone()
+        if user_row:
+            user_id = user_row[0]
+            cursor.execute('''
+                SELECT business_all_time_sent, business_messages_sent
+                FROM usage
+                WHERE user_id = ?
+            ''', (user_id,))
+            usage_row = cursor.fetchone()
+            if usage_row:
+                total_business_all_time += usage_row[0] or 0
+                total_business_messages_sent += usage_row[1] or 0
+
+    conn.close()
+
+    # Update plan status with aggregated business usage
+    plan_status['all_time_sent'] = total_business_all_time
+    plan_status['messages_sent'] = total_business_messages_sent
+
+    # Recalculate remaining messages
+    if plan_status['is_unlimited']:
+        plan_status['messages_remaining'] = -1
+    else:
+        plan_status['messages_remaining'] = max(0, plan_status['message_limit'] - total_business_messages_sent)
+
+    return plan_status
+
+# Business team management functions
+
+def create_business_team(owner_user_id, subscription_id, max_members=3):
+    """Create a new business team for a business plan holder."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Check if team already exists for this subscription
+    cursor.execute('SELECT id FROM business_teams WHERE subscription_id = ?', (subscription_id,))
+    existing = cursor.fetchone()
+
+    if existing:
+        conn.close()
+        return existing[0]
+
+    cursor.execute('''
+        INSERT INTO business_teams (owner_user_id, subscription_id, max_members, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (owner_user_id, subscription_id, max_members, datetime.now().isoformat(), datetime.now().isoformat()))
+
+    team_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return team_id
+
+def get_business_team_by_owner(user_id):
+    """Get business team where user is the owner."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT bt.* FROM business_teams bt
+        JOIN subscriptions s ON bt.subscription_id = s.id
+        WHERE bt.owner_user_id = ? AND s.is_active = 1
+        ORDER BY bt.id DESC LIMIT 1
+    ''', (user_id,))
+    team = cursor.fetchone()
+    conn.close()
+    return dict(team) if team else None
+
+def get_business_team_by_member(discord_id):
+    """Get business team where user is a member."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT bt.* FROM business_teams bt
+        JOIN business_team_members btm ON bt.id = btm.team_id
+        WHERE btm.member_discord_id = ?
+        ORDER BY bt.id DESC LIMIT 1
+    ''', (discord_id,))
+    team = cursor.fetchone()
+    conn.close()
+    return dict(team) if team else None
+
+def add_team_member(team_id, discord_id, username, avatar):
+    """Add a member to a business team."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            INSERT INTO business_team_members (team_id, member_discord_id, member_username, member_avatar, added_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (team_id, discord_id, username, avatar, datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False  # Member already exists
+
+def remove_team_member(team_id, discord_id):
+    """Remove a member from a business team."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM business_team_members WHERE team_id = ? AND member_discord_id = ?', (team_id, discord_id))
+    conn.commit()
+    conn.close()
+
+def update_team_member_info(team_id, discord_id, username, avatar):
+    """Update username and avatar for a team member."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE business_team_members
+        SET member_username = ?, member_avatar = ?
+        WHERE team_id = ? AND member_discord_id = ?
+    ''', (username, avatar, team_id, discord_id))
+    conn.commit()
+    conn.close()
+
+def get_team_members(team_id):
+    """Get all members of a business team."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT btm.*, u.id as user_id
+        FROM business_team_members btm
+        LEFT JOIN users u ON u.discord_id = btm.member_discord_id
+        WHERE btm.team_id = ?
+        ORDER BY btm.added_at
+    ''', (team_id,))
+    members = cursor.fetchall()
+    conn.close()
+    return [dict(member) for member in members]
+
+def get_team_member_count(team_id):
+    """Get the count of team members."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM business_team_members WHERE team_id = ?', (team_id,))
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+def update_team_message(team_id, message):
+    """Update the team message for a business team."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE business_teams SET team_message = ?, updated_at = ? WHERE id = ?
+    ''', (message, datetime.now().isoformat(), team_id))
+    conn.commit()
+    conn.close()
+
+def is_business_plan_owner(user_id):
+    """Check if user is a business plan owner."""
+    team = get_business_team_by_owner(user_id)
+    return team is not None
+
+def is_business_team_member(discord_id):
+    """Check if user is a business team member."""
+    team = get_business_team_by_member(discord_id)
+    return team is not None
+
+def get_team_member_stats(team_id):
+    """Get statistics for all team members including their business usage."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT
+            btm.member_discord_id,
+            btm.member_username,
+            btm.member_avatar,
+            btm.added_at,
+            u.id as user_id
+        FROM business_team_members btm
+        LEFT JOIN users u ON u.discord_id = btm.member_discord_id
+        WHERE btm.team_id = ?
+        ORDER BY btm.added_at
+    ''', (team_id,))
+    members = cursor.fetchall()
+
+    stats = []
+    for member in members:
+        member_dict = dict(member)
+
+        # Get business usage for this member if they have a user account
+        if member_dict['user_id']:
+            cursor.execute('''
+                SELECT business_messages_sent, business_all_time_sent
+                FROM usage
+                WHERE user_id = ?
+            ''', (member_dict['user_id'],))
+            usage = cursor.fetchone()
+
+            if usage:
+                member_dict['business_messages_sent'] = usage[0] or 0
+                member_dict['business_all_time_sent'] = usage[1] or 0
+            else:
+                member_dict['business_messages_sent'] = 0
+                member_dict['business_all_time_sent'] = 0
+        else:
+            member_dict['business_messages_sent'] = 0
+            member_dict['business_all_time_sent'] = 0
+
+        stats.append(member_dict)
+
+    conn.close()
+    return stats
 
 # Initialize database on import
 init_db()

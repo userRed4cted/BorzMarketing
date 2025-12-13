@@ -56,6 +56,10 @@
                     {% if plan_status and plan_status.has_plan %}
                         <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                     {% endif %}
+                    {% if has_business %}
+                    <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
+                    <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
+                    {% endif %}
                     <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
                 {% endif %}
                 <div class="dropdown-divider"></div>
@@ -72,6 +76,7 @@
                 <div class="purchase-mode-toggle">
                     <button class="mode-btn active" data-mode="subscriptions">Subscriptions</button>
                     <button class="mode-btn" data-mode="one-time">One Time Purchase</button>
+                    <button class="mode-btn" data-mode="business">Business</button>
                 </div>
 
                 <!-- Subscriptions Section -->
@@ -174,6 +179,68 @@
                         {% endfor %}
                     </div>
                 </div>
+
+                <!-- Business Section -->
+                <div class="purchase-section" id="business-section" style="display: none;">
+                    <div class="billing-toggle">
+                        <span class="billing-label">Monthly</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="businessBillingToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="billing-label">Yearly <span class="save-badge">Save 17%</span></span>
+                    </div>
+
+                    <div class="plans-grid">
+                        {% for plan_id, plan in business_plans.items() %}
+                        {% set yearly_per_month = (plan.price_yearly / 12) | round(2) %}
+                        {% set yearly_savings = (plan.price_monthly * 12 - plan.price_yearly) | round(2) %}
+                        <div class="plan-card" data-plan-id="{{ plan_id }}" data-glow="{{ plan.glow_color }}">
+                            <div class="plan-header">
+                                <h3 class="plan-name">{{ plan.name }}</h3>
+                                <div class="plan-price-section">
+                                    <div class="price-row business-monthly-price">
+                                        <span class="price">${{ "%.2f"|format(plan.price_monthly) if plan.price_monthly % 1 != 0 else "%.0f"|format(plan.price_monthly) }}</span>
+                                    </div>
+                                    <div class="price-row business-yearly-price" style="display: none;">
+                                        <span class="price">${{ "%.2f"|format(plan.price_yearly) if plan.price_yearly % 1 != 0 else "%.0f"|format(plan.price_yearly) }}</span>
+                                    </div>
+                                    <span class="period business-monthly-period">PER MONTH</span>
+                                    <span class="period business-yearly-period" style="display: none;">PER YEAR</span>
+                                    <div class="yearly-savings business-yearly-savings" style="display: none;">
+                                        {% if plan.get('savings_text') %}
+                                            {{ plan.savings_text }}
+                                        {% else %}
+                                            SAVING ${{ "%.0f"|format(yearly_savings) }} ({{ yearly_discount }}% OFF) YEARLY
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="plan-features">
+                                {% for feature in plan.features %}
+                                <div class="feature">
+                                    <svg class="check-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <path d="M16.6667 5L7.50004 14.1667L3.33337 10" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>{{ feature }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <button class="purchase-btn" data-plan-type="business" data-plan-id="{{ plan_id }}">
+                                {% if plan_status and plan_status.has_plan %}
+                                    {% if plan_status.plan_id == plan_id and plan_status.plan_type == 'business' %}
+                                        Current Plan
+                                    {% else %}
+                                        Change Plan
+                                    {% endif %}
+                                {% else %}
+                                    {{ plan.get('button_text', 'Join with Card') }}
+                                {% endif %}
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -197,10 +264,11 @@
             }
         });
 
-        // Mode toggle (Subscriptions vs One-Time) with fade effect and rate limiting
+        // Mode toggle (Subscriptions vs One-Time vs Business) with fade effect and rate limiting
         const modeButtons = document.querySelectorAll('.mode-btn');
         const subscriptionsSection = document.getElementById('subscriptions-section');
         const oneTimeSection = document.getElementById('one-time-section');
+        const businessSection = document.getElementById('business-section');
         let isModeToggling = false;  // Rate limiting flag
 
         modeButtons.forEach(btn => {
@@ -216,9 +284,17 @@
                 modeButtons.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
 
-                // Determine which section to show/hide
-                const currentSection = subscriptionsSection.style.display !== 'none' ? subscriptionsSection : oneTimeSection;
-                const newSection = mode === 'subscriptions' ? subscriptionsSection : oneTimeSection;
+                // Determine which section is currently visible
+                let currentSection = null;
+                if (subscriptionsSection.style.display !== 'none') currentSection = subscriptionsSection;
+                else if (oneTimeSection.style.display !== 'none') currentSection = oneTimeSection;
+                else if (businessSection.style.display !== 'none') currentSection = businessSection;
+
+                // Determine which section to show
+                let newSection = null;
+                if (mode === 'subscriptions') newSection = subscriptionsSection;
+                else if (mode === 'one-time') newSection = oneTimeSection;
+                else if (mode === 'business') newSection = businessSection;
 
                 // Skip if already on the right section
                 if (currentSection === newSection) return;
@@ -227,12 +303,16 @@
                 isModeToggling = true;
 
                 // Fade out current section
-                currentSection.classList.add('fade-out');
+                if (currentSection) {
+                    currentSection.classList.add('fade-out');
+                }
 
                 // After fade out, switch sections and fade in
                 setTimeout(() => {
-                    currentSection.style.display = 'none';
-                    currentSection.classList.remove('fade-out');
+                    if (currentSection) {
+                        currentSection.style.display = 'none';
+                        currentSection.classList.remove('fade-out');
+                    }
 
                     newSection.style.display = 'block';
                     newSection.classList.add('fade-in');
@@ -308,6 +388,68 @@
             });
         }
 
+        // Business Billing toggle (Monthly/Yearly) with fade effect on entire cards and rate limiting
+        const businessBillingToggle = document.getElementById('businessBillingToggle');
+        const businessCards = document.querySelectorAll('#business-section .plan-card');
+        const businessMonthlyPrices = document.querySelectorAll('.business-monthly-price');
+        const businessYearlyPrices = document.querySelectorAll('.business-yearly-price');
+        const businessMonthlyPeriods = document.querySelectorAll('.business-monthly-period');
+        const businessYearlyPeriods = document.querySelectorAll('.business-yearly-period');
+        const businessYearlySavings = document.querySelectorAll('.business-yearly-savings');
+        let isBusinessToggling = false;  // Rate limiting flag
+
+        if (businessBillingToggle) {
+            businessBillingToggle.addEventListener('change', (e) => {
+                // Rate limiting - prevent spam clicking
+                if (isBusinessToggling) {
+                    e.preventDefault();
+                    businessBillingToggle.checked = !businessBillingToggle.checked;  // Revert the change
+                    return;
+                }
+
+                isBusinessToggling = true;  // Lock the toggle
+                const isYearly = businessBillingToggle.checked;
+
+                // Fade out all business plan cards
+                businessCards.forEach(card => card.classList.add('fade-out'));
+
+                // After fade out, switch display and fade in
+                setTimeout(() => {
+                    businessMonthlyPrices.forEach(el => {
+                        el.style.display = isYearly ? 'none' : 'flex';
+                    });
+
+                    businessYearlyPrices.forEach(el => {
+                        el.style.display = isYearly ? 'flex' : 'none';
+                    });
+
+                    businessMonthlyPeriods.forEach(el => {
+                        el.style.display = isYearly ? 'none' : 'inline';
+                    });
+
+                    businessYearlyPeriods.forEach(el => {
+                        el.style.display = isYearly ? 'inline' : 'none';
+                    });
+
+                    businessYearlySavings.forEach(el => {
+                        el.style.display = isYearly ? 'block' : 'none';
+                    });
+
+                    // Fade in cards
+                    businessCards.forEach(card => {
+                        card.classList.remove('fade-out');
+                        card.classList.add('fade-in');
+                    });
+
+                    // Remove fade-in class after animation and unlock toggle
+                    setTimeout(() => {
+                        businessCards.forEach(card => card.classList.remove('fade-in'));
+                        isBusinessToggling = false;  // Unlock the toggle after animation completes
+                    }, 300);
+                }, 300);
+            });
+        }
+
         // Plan card glow effect - always on
         const planCards = document.querySelectorAll('.plan-card');
         planCards.forEach(card => {
@@ -353,17 +495,24 @@
 
                 const planType = btn.dataset.planType;
                 const planId = btn.dataset.planId;
-                const isYearly = billingToggle && billingToggle.checked;
+
+                // Determine which billing toggle to use based on plan type
+                let isYearly = false;
+                if (planType === 'subscription') {
+                    isYearly = billingToggle && billingToggle.checked;
+                } else if (planType === 'business') {
+                    isYearly = businessBillingToggle && businessBillingToggle.checked;
+                }
 
                 // Get plan name from the card
                 const planCard = btn.closest('.plan-card');
                 const planName = planCard.querySelector('.plan-name').textContent;
-                const billingInfo = planType === 'subscription'
+                const billingInfo = (planType === 'subscription' || planType === 'business')
                     ? (isYearly ? ' (Yearly)' : ' (Monthly)')
                     : '';
 
                 // Show confirmation dialog
-                const confirmMessage = `Are you sure you want to activate the ${planName}${billingInfo} plan?\n\nThis will replace any existing plan on your account.`;
+                const confirmMessage = `Are you sure you want to activate the ${planName}${billingInfo} plan?\n\nThis will replace any existing plan on your account.\nYour allowance will be reset and updated to match the new plan.`;
 
                 if (!confirm(confirmMessage)) {
                     return; // User cancelled
@@ -385,7 +534,7 @@
                 .then(data => {
                     if (data.success) {
                         alert(`${planName}${billingInfo} plan activated successfully!`);
-                        window.location.href = '/panel';
+                        window.location.href = data.redirect_url || '/panel';
                     } else {
                         alert('Error: ' + (data.error || 'Unknown error'));
                     }

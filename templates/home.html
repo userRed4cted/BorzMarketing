@@ -62,6 +62,10 @@
                     {% if plan_status and plan_status.has_plan %}
                         <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                     {% endif %}
+                    {% if has_business %}
+                    <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
+                    <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
+                    {% endif %}
                     <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
                 {% endif %}
                 <div class="dropdown-divider"></div>

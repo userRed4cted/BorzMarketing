@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Discord Server Manager</title>
+    <title>Business Panel - Discord Server Manager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='tab_enforcement.js') }}"></script>
 </head>
@@ -20,8 +20,8 @@
                         </svg>
                     </div>
                     <div class="navbar-text">
-                        <h1 class="navbar-title">Borz Marketing Panel</h1>
-                        <p class="navbar-subtitle">Select in which servers and channels you would like to automate your marketing</p>
+                        <h1 class="navbar-title">Business Marketing Panel</h1>
+                        <p class="navbar-subtitle">Send team advertisements using the shared message set by your team owner</p>
                     </div>
                 </div>
                 <div class="nav-right">
@@ -97,7 +97,7 @@
                         </div>
                     </div>
 
-                    <!-- Right: Selected Channels and Message -->
+                    <!-- Right: Selected Channels and Team Message -->
                     <div class="action-panel">
                         <!-- Unified Header for Right Panel -->
                         <div class="unified-header">
@@ -117,12 +117,15 @@
                             </div>
                         </div>
 
-                        <!-- Message Composer -->
+                        <!-- Team Message Display (Read-only) -->
                         <div class="message-section">
-                            <textarea id="message-input" class="message-input" placeholder="Enter your message here..." maxlength="2000"></textarea>
+                            <div class="team-message-notice" style="background: rgba(88, 101, 242, 0.1); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem; color: #dcddde; font-size: 0.9rem;">
+                                <strong>Team Message:</strong> Business team message contents are managed by the plan holder.
+                            </div>
+                            <textarea id="message-input" class="message-input" placeholder="Team message will appear here..." maxlength="2000" readonly style="cursor: not-allowed; opacity: 0.8;">{{ team.team_message or '' }}</textarea>
                             <div class="message-footer">
-                                <span class="char-count"><span id="char-count">0</span>/2000</span>
-                                <button id="send-btn" class="send-button" disabled>
+                                <span class="char-count"><span id="char-count">{{ (team.team_message or '')|length }}</span>/2000</span>
+                                <button id="send-btn" class="send-button" {% if not team.team_message %}disabled{% endif %}>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <line x1="22" y1="2" x2="11" y2="13"></line>
                                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -151,6 +154,9 @@
             }
         });
 
+        // Team message that will be used for all sends
+        const TEAM_MESSAGE = {{ (team.team_message or '')|tojson }};
+
         // Wait for all elements to load before initializing
         document.addEventListener('DOMContentLoaded', function() {
             const serversList = document.getElementById('servers-list');
@@ -176,6 +182,13 @@
             let failedChannels = new Map(); // Track channels that failed to send with failure type
             let isConfirmState = false; // Track if send button is in confirmation state
             let confirmTimeout = null; // Timeout for auto-reset confirmation
+
+            // Check if team message exists
+            if (!TEAM_MESSAGE) {
+                if (messageInput) {
+                    messageInput.placeholder = "No team message set. Please contact your team owner.";
+                }
+            }
 
             // Check session on API error
             function handleSessionError(response) {
@@ -214,7 +227,7 @@
 
             // Load saved data from localStorage (persists across sessions)
             function loadSelectedChannels() {
-                const saved = localStorage.getItem('selectedChannels');
+                const saved = localStorage.getItem('businessSelectedChannels');
                 if (saved) {
                     try {
                         selectedChannels = JSON.parse(saved);
@@ -225,38 +238,17 @@
                 }
             }
 
-            function loadMessageText() {
-                const saved = localStorage.getItem('messageText');
-                if (saved && messageInput) {
-                    messageInput.value = saved;
-                    if (charCount) {
-                        charCount.textContent = saved.length;
-                    }
-                }
-            }
-
-            // Load user data from database
+            // Load user data from database (business panel specific)
             async function loadUserDataFromDB() {
                 try {
                     const response = await fetch('/api/get-user-data');
                     if (response.ok) {
                         const data = await response.json();
 
-                        // Load selected channels if available
-                        if (data.selected_channels && Array.isArray(data.selected_channels)) {
-                            selectedChannels = data.selected_channels;
-                            localStorage.setItem('selectedChannels', JSON.stringify(selectedChannels));
-                        }
-
-                        // Load draft message if available
-                        if (data.draft_message !== null && data.draft_message !== undefined && messageInput) {
-                            messageInput.value = data.draft_message;
-                            localStorage.setItem('messageText', data.draft_message);
-
-                            // Update character count
-                            if (charCount) {
-                                charCount.textContent = data.draft_message.length;
-                            }
+                        // Load business selected channels if available
+                        if (data.business_selected_channels && Array.isArray(data.business_selected_channels)) {
+                            selectedChannels = data.business_selected_channels;
+                            localStorage.setItem('businessSelectedChannels', JSON.stringify(selectedChannels));
                         }
 
                         return true;
@@ -270,7 +262,7 @@
                 }
             }
 
-            // Save user data to database
+            // Save user data to database (business panel specific)
             async function saveUserDataToDB() {
                 try {
                     const response = await fetch('/api/save-user-data', {
@@ -279,8 +271,7 @@
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            selected_channels: selectedChannels,
-                            draft_message: messageInput ? messageInput.value : ''
+                            business_selected_channels: selectedChannels
                         })
                     });
 
@@ -298,19 +289,11 @@
 
             // Save data to localStorage (persists across sessions)
             function saveSelectedChannels() {
-                localStorage.setItem('selectedChannels', JSON.stringify(selectedChannels));
+                localStorage.setItem('businessSelectedChannels', JSON.stringify(selectedChannels));
                 // Also save to database
                 saveUserDataToDB();
             }
 
-            function saveMessageText() {
-                if (messageInput) {
-                    localStorage.setItem('messageText', messageInput.value);
-                    // Also save to database
-                    saveUserDataToDB();
-                }
-            }
-            
             // Add search tag
             function addSearchTag(text) {
                 if (searchTags.length >= 6) {
@@ -335,7 +318,7 @@
                     renderChannels();
                 }
             }
-            
+
             // Update search tags display
             function updateSearchTagsDisplay() {
                 searchTagsContainer.innerHTML = '';
@@ -352,7 +335,7 @@
                     searchTagsContainer.appendChild(tagEl);
                 });
             }
-            
+
             // Handle channel search input
             if (channelSearch) {
                 channelSearch.addEventListener('keypress', (e) => {
@@ -377,7 +360,7 @@
                     updateSelectedDisplay();
                 });
             }
-            
+
             // Render servers list with search filter
             function renderServers() {
                 if (!serversList) return;
@@ -433,7 +416,6 @@
             async function initializeUI() {
                 // Load from localStorage first (instant)
                 loadSelectedChannels();
-                loadMessageText();
 
                 // Then load from database (syncs across devices)
                 await loadUserDataFromDB();
@@ -558,7 +540,7 @@
                     renderChannels();
                 }
             }
-            
+
             // Render channels for selected server
             function renderChannels() {
                 if (!selectedGuild) {
@@ -627,7 +609,7 @@
                     channelsList.appendChild(channelItem);
                 });
             }
-            
+
             // Toggle channel selection
             function toggleChannel(channel, isChecked) {
                 if (!selectedGuild) return;
@@ -662,7 +644,7 @@
                 updateSelectedDisplay();
                 updateSendButton();
             }
-            
+
             // Update count badge on server
             function updateServerCount(guildId) {
                 const count = selectedChannels.filter(ch => ch.guildId === guildId).length;
@@ -681,7 +663,7 @@
                     }
                 }
             }
-            
+
             // Update selected channels display
             function updateSelectedDisplay() {
                 if (selectedChannels.length > 0) {
@@ -768,12 +750,12 @@
                     clearAllBtn.style.display = 'none';
                 }
             }
-            
+
             // Update send button state
             function updateSendButton() {
                 if (sendBtn && messageInput) {
-                    sendBtn.disabled = selectedChannels.length === 0 || !messageInput.value.trim();
-                    // Reset confirmation state when channels or message changes
+                    sendBtn.disabled = selectedChannels.length === 0 || !TEAM_MESSAGE.trim();
+                    // Reset confirmation state when channels change
                     resetConfirmState();
                 }
             }
@@ -792,24 +774,13 @@
                     }
                 }
             }
-            
-            // Message input listener
-            if (messageInput) {
-                messageInput.addEventListener('input', function() {
-                    if (charCount) {
-                        charCount.textContent = this.value.length;
-                    }
-                    saveMessageText();
-                    updateSendButton();
-                });
-            }
-            
+
             // Send button handler
             if (sendBtn) {
                 sendBtn.addEventListener('click', async function() {
-                    if (selectedChannels.length > 0 && messageInput && messageInput.value.trim()) {
+                    if (selectedChannels.length > 0 && TEAM_MESSAGE.trim()) {
                         // Check for filtered content before proceeding
-                        const message = messageInput.value.trim();
+                        const message = TEAM_MESSAGE.trim();
                         const filteredWords = {{ BLACKLISTED_WORDS|tojson }};
 
                         // Check message against blacklist (case-insensitive)
@@ -824,7 +795,7 @@
                         }
 
                         if (foundWord) {
-                            alert(`⚠️ Message contains prohibited content: "${foundWord}"\n\nPlease remove this content from your message before sending.`);
+                            alert(`⚠️ Team message contains prohibited content: "${foundWord}"\n\nPlease update the team message in Business Management to remove this content.`);
                             return; // Stop execution
                         }
 
@@ -874,7 +845,7 @@
                                 // Update progress in button
                                 sendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinner"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M12 2 A10 10 0 0 1 22 12" stroke-linecap="round"></path></svg> Sending ${i + 1}/${selectedChannels.length}...`;
 
-                                // Send message (no retry for rate limits)
+                                // Send message using team message (no retry for rate limits)
                                 const response = await fetch('/api/send-message-single', {
                                     method: 'POST',
                                     headers: {
@@ -882,7 +853,7 @@
                                     },
                                     body: JSON.stringify({
                                         channel: channel,
-                                        message: messageInput.value
+                                        message: TEAM_MESSAGE
                                     })
                                 });
 
@@ -925,7 +896,7 @@
                             alert(`❌ Error sending message: ${error.message}`);
                         } finally {
                             isSending = false;
-                            sendBtn.disabled = selectedChannels.length === 0 || !messageInput.value.trim();
+                            sendBtn.disabled = selectedChannels.length === 0 || !TEAM_MESSAGE.trim();
                             sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg> Send';
                         }
                     }

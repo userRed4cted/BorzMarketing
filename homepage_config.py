@@ -8,8 +8,7 @@ SLIDESHOW_FADE_DURATION = 600  # Fade in/out duration in milliseconds (300 = 0.3
 # Slideshow Messages
 # Add as many messages as you want - the slideshow will cycle through them
 SLIDESHOW_MESSAGES = [
-    "The first marketing tool to send multiple advertisements all across discord with one click",
-    "Tired of untrustworthy advertising services where you cant monitor, customise, or have control over your marketing?",
-    "Stop overpaying for marketing services that dont deliver results, and have full control over your marketing campaigns",
-    "What used to take hours, now takes seconds with Borz Advertising"
+    "The first marketing tool to send multiple advertisements all across different discord servers with one click",
+    "Tired of expensive and untrustworthy marketing services where you cant monitor, customise, or have control over your marketing?",
+    "What used to take hours, now takes seconds with Borz Marketing"
 ]
