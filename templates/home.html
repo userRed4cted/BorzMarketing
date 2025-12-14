@@ -150,12 +150,13 @@
             }
         });
 
-        // Hero text slideshow
+        // Hero text slideshow - uses requestAnimationFrame for background-safe timing
         const heroTitle = document.getElementById('hero-title');
         const messages = {{ slideshow_messages | tojson }};
         const interval = {{ slideshow_interval }};
         const fadeDuration = {{ slideshow_fade_duration }};
         let currentIndex = 0;
+        let lastSlideTime = Date.now();
 
         function changeSlide() {
             // Fade out
@@ -176,8 +177,18 @@
             }, fadeDuration);
         }
 
+        // Use requestAnimationFrame for smooth background-safe slideshow
+        function slideshowLoop() {
+            const now = Date.now();
+            if (now - lastSlideTime >= interval) {
+                changeSlide();
+                lastSlideTime = now;
+            }
+            requestAnimationFrame(slideshowLoop);
+        }
+
         // Start slideshow
-        setInterval(changeSlide, interval);
+        requestAnimationFrame(slideshowLoop);
 
         // Gallery Lightbox
         const images = [

@@ -53,7 +53,7 @@
                 <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
                 <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
                 {% if session.get('user') %}
-                    {% if plan_status and plan_status.has_plan %}
+                    {% if plan_status and plan_status.has_plan and not (plan_status.plan_id and plan_status.plan_id.startswith('business_')) %}
                         <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                     {% endif %}
                     {% if has_business %}

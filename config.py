@@ -126,8 +126,4 @@ BUSINESS_PLANS = {
     }
 }
 
-# Admin User IDs (Discord IDs)
-ADMIN_DISCORD_IDS = [
-    # Add admin Discord IDs here
-    # Example: '123456789012345678'
-]
+# Note: Admin user IDs are configured in admin_config.py

@@ -49,15 +49,8 @@
             <div class="dropdown-menu" id="dropdown-menu">
                 <a href="{{ url_for('home') }}" class="dropdown-item">Home</a>
                 <a href="{{ url_for('purchase') }}" class="dropdown-item">Purchase</a>
-                {% if session.get('user') %}
-                    <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
-                    <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
-                {% endif %}
                 <div class="dropdown-divider"></div>
                 <a href="https://discord.gg/KWt6rvCukp" target="_blank" class="dropdown-item discord-item">Discord Server</a>
-                {% if session.get('user') %}
-                    <a href="{{ url_for('logout') }}" class="dropdown-item logout-item">Logout</a>
-                {% endif %}
             </div>
         </nav>
 

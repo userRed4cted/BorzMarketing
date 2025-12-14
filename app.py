@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, session, request, g
+from flask import Flask, render_template, redirect, url_for, session, request
 import os
 from dotenv import load_dotenv
 import requests
@@ -55,11 +55,8 @@ DISCORD_OAUTH_URL = f'https://discord.com/api/oauth2/authorize?client_id={DISCOR
 # Initialize database
 init_db()
 
-# Helper function to get client IP
-def get_client_ip():
-    if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0]
-    return request.remote_addr
+# Use the security module's get_client_ip function
+get_client_ip = security_get_client_ip
 
 # Helper function to check business access
 def has_business_access(user_id, discord_id):
@@ -1153,6 +1150,7 @@ def add_business_member():
         return {'success': False, 'error': str(e)}, 500
 
 @app.route('/api/business/remove-member', methods=['POST'])
+@rate_limit('api')
 def remove_business_member():
     """Remove a member from the business team."""
     if 'user' not in session:
@@ -1509,6 +1507,7 @@ def admin_get_user_details(user_id):
         return {'success': False, 'error': str(e)}, 500
 
 @app.route('/api/admin/ban/<int:user_id>', methods=['POST'])
+@rate_limit('api')
 def admin_ban_user(user_id):
     """Ban a user."""
     if 'user' not in session:
@@ -1519,6 +1518,11 @@ def admin_ban_user(user_id):
         return {'success': False, 'error': 'Unauthorized'}, 403
 
     try:
+        # Prevent banning admin users (server-side protection)
+        target_user = get_user_by_id(user_id)
+        if target_user and is_admin(target_user['discord_id']):
+            return {'success': False, 'error': 'Cannot ban admin users'}, 403
+
         ban_user(user_id)
         return {'success': True, 'message': 'User banned successfully'}, 200
 
@@ -1527,6 +1531,7 @@ def admin_ban_user(user_id):
         return {'success': False, 'error': str(e)}, 500
 
 @app.route('/api/admin/unban/<int:user_id>', methods=['POST'])
+@rate_limit('api')
 def admin_unban_user(user_id):
     """Unban a user."""
     if 'user' not in session:
@@ -1545,6 +1550,7 @@ def admin_unban_user(user_id):
         return {'success': False, 'error': str(e)}, 500
 
 @app.route('/api/admin/flag/<int:user_id>', methods=['POST'])
+@rate_limit('api')
 def admin_flag_user(user_id):
     """Flag a user."""
     if 'user' not in session:
@@ -1563,6 +1569,7 @@ def admin_flag_user(user_id):
         return {'success': False, 'error': str(e)}, 500
 
 @app.route('/api/admin/unflag/<int:user_id>', methods=['POST'])
+@rate_limit('api')
 def admin_unflag_user(user_id):
     """Unflag a user."""
     if 'user' not in session:
@@ -1581,6 +1588,7 @@ def admin_unflag_user(user_id):
         return {'success': False, 'error': str(e)}, 500
 
 @app.route('/api/admin/delete/<int:user_id>', methods=['POST'])
+@rate_limit('api')
 def admin_delete_user(user_id):
     """Delete a user account."""
     if 'user' not in session:
@@ -1591,6 +1599,11 @@ def admin_delete_user(user_id):
         return {'success': False, 'error': 'Unauthorized'}, 403
 
     try:
+        # Prevent deleting admin users (server-side protection)
+        target_user = get_user_by_id(user_id)
+        if target_user and is_admin(target_user['discord_id']):
+            return {'success': False, 'error': 'Cannot delete admin users'}, 403
+
         delete_user_account_admin(user_id)
         return {'success': True, 'message': 'User deleted successfully'}, 200
 
