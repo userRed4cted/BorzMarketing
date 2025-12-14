@@ -14,16 +14,6 @@
 # =============================================================================
 
 
-# -----------------------------------------------------------------------------
-# YEARLY DISCOUNT
-# -----------------------------------------------------------------------------
-# This percentage is used in the auto-calculated savings text when yearly is selected.
-# Only used if 'savings_text' is not provided for a plan.
-# Element: Savings text on plan cards (e.g., "SAVING $XX (17% OFF) YEARLY")
-
-YEARLY_DISCOUNT_PERCENT = 17
-
-
 # =============================================================================
 # SUBSCRIPTION PLANS (Monthly/Yearly recurring)
 # =============================================================================

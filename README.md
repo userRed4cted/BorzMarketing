@@ -61,14 +61,15 @@ borz_adveristing_website/
 │   ├── navbar.py            # Navigation config
 │   ├── pages.py             # Page titles config
 │   ├── plans.py             # Pricing plans config
+│   ├── site.py              # Site-wide settings (fonts, etc.)
 │   └── text.py              # UI text/labels config
 ├── database/                 # Database utilities
-│   └── init_db.py           # Database initialization
+│   └── models.py            # Database models and operations
 ├── security/                 # Security utilities
-│   └── encryption.py        # Token encryption
+│   ├── auth.py              # Authentication & validation
+│   └── content_filter.py    # Message content filtering
 ├── templates/                # Jinja2 HTML templates
-├── static/                   # CSS, JS, images
-├── docs/                     # Documentation
+├── static/                   # CSS, JS files
 └── RESET_DATABASE.py         # Database reset script
 ```
 
@@ -80,10 +81,11 @@ All configuration is in the `config/` folder:
 - **homepage.py** - Homepage slideshow and content
 - **navbar.py** - Navigation menu labels
 - **text.py** - UI text and labels
+- **site.py** - Site-wide settings (fonts, layout, animations)
 - **admin.py** - Admin user Discord IDs
 - **database_version.py** - Database wipe notification version
 
-See the `docs/` folder for detailed configuration guides.
+See the individual config files for detailed settings.
 
 ## Database Management
 

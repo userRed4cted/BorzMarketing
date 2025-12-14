@@ -40,14 +40,10 @@ app = Flask(__name__)
 # Apply secure session configuration
 secure_session_config(app)
 
-# Make CSRF token available in all templates
-@app.context_processor
-def inject_csrf_token():
-    return dict(csrf_token=generate_csrf_token())
-
 # Session security configuration
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('FLASK_ENV') == 'production'  # Secure cookies in production
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)  # 30 days session
 app.config['SESSION_PERMANENT'] = True
 
@@ -467,7 +463,7 @@ def oauth_callback():
 
 @app.route('/purchase')
 def purchase():
-    from config import SUBSCRIPTION_PLANS, ONE_TIME_PLANS, BUSINESS_PLANS, YEARLY_DISCOUNT_PERCENT
+    from config import SUBSCRIPTION_PLANS, ONE_TIME_PLANS, BUSINESS_PLANS
 
     # Get plan status if user is logged in
     plan_status = None
@@ -484,7 +480,6 @@ def purchase():
                          subscription_plans=SUBSCRIPTION_PLANS,
                          one_time_plans=ONE_TIME_PLANS,
                          business_plans=BUSINESS_PLANS,
-                         yearly_discount=YEARLY_DISCOUNT_PERCENT,
                          plan_status=plan_status,
                          has_business=has_business,
                          is_admin_user=is_admin_user)

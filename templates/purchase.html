@@ -102,8 +102,6 @@
 
                     <div class="plans-grid">
                         {% for plan_id, plan in subscription_plans.items() %}
-                        {% set yearly_per_month = (plan.price_yearly / 12) | round(2) %}
-                        {% set yearly_savings = (plan.price_monthly * 12 - plan.price_yearly) | round(2) %}
                         <div class="plan-card" data-plan-id="{{ plan_id }}" data-glow="{{ plan.glow_color }}">
                             <div class="plan-header">
                                 <h3 class="plan-name">{{ plan.name }}</h3>
@@ -117,11 +115,7 @@
                                     <span class="period monthly-period">PER MONTH</span>
                                     <span class="period yearly-period" style="display: none;">PER YEAR</span>
                                     <div class="yearly-savings" style="display: none; {% if plan.savings_color %}color: {{ plan.savings_color }};{% endif %}">
-                                        {% if plan.get('savings_text') %}
-                                            {{ plan.savings_text }}
-                                        {% else %}
-                                            SAVING ${{ "%.0f"|format(yearly_savings) }} ({{ yearly_discount }}% OFF) YEARLY
-                                        {% endif %}
+                                        {{ plan.savings_text }}
                                     </div>
                                 </div>
                             </div>
@@ -203,8 +197,6 @@
 
                     <div class="plans-grid">
                         {% for plan_id, plan in business_plans.items() %}
-                        {% set yearly_per_month = (plan.price_yearly / 12) | round(2) %}
-                        {% set yearly_savings = (plan.price_monthly * 12 - plan.price_yearly) | round(2) %}
                         <div class="plan-card" data-plan-id="{{ plan_id }}" data-glow="{{ plan.glow_color }}">
                             <div class="plan-header">
                                 <h3 class="plan-name">{{ plan.name }}</h3>
@@ -218,11 +210,7 @@
                                     <span class="period business-monthly-period">PER MONTH</span>
                                     <span class="period business-yearly-period" style="display: none;">PER YEAR</span>
                                     <div class="yearly-savings business-yearly-savings" style="display: none; {% if plan.savings_color %}color: {{ plan.savings_color }};{% endif %}">
-                                        {% if plan.get('savings_text') %}
-                                            {{ plan.savings_text }}
-                                        {% else %}
-                                            SAVING ${{ "%.0f"|format(yearly_savings) }} ({{ yearly_discount }}% OFF) YEARLY
-                                        {% endif %}
+                                        {{ plan.savings_text }}
                                     </div>
                                 </div>
                             </div>
