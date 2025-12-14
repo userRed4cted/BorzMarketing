@@ -23,6 +23,7 @@ SUBSCRIPTION_PLANS = {
         'allowance_period': 'weekly',  # 'daily', 'weekly', 'monthly' (only used if usage_type is 'allowance')
         'glow_color': 'rgba(255, 255, 255, 0.6)',  # Glow effect color
         'savings_text': '$6.25 per month',  # Optional: Custom savings text (leave empty to auto-calculate)
+        'savings_color': '#7C437D',  # Optional: Custom color for savings text (default: green)
         'button_text': 'Subscribe'  # Button text (default: 'Join with Card')
     },
     'pro': {
@@ -36,8 +37,9 @@ SUBSCRIPTION_PLANS = {
         'message_limit': -1,  # -1 means unlimited
         'usage_type': 'amount',  # 'allowance' or 'amount'
         'allowance_period': 'monthly',  # Only used if usage_type is 'allowance'
-        'glow_color': 'rgba(218, 83, 207, 0.6)',
+        'glow_color': 'rgba(124, 67, 125, 0.6)',
         'savings_text': '$12.50 per month',  # Optional: Custom savings text
+        'savings_color': '#7C437D',  # Optional: Custom color for savings text
         'button_text': 'Subscribe'  # Button text (default: 'Join with Card')
     }
 }
@@ -85,7 +87,7 @@ ONE_TIME_PLANS = {
         'usage_type': 'allowance',  # 'allowance' or 'amount'
         'allowance_period': 'daily',  # Resets daily
         'duration_days': 7,
-        'glow_color': 'rgba(188, 83, 207, 0.6)',
+        'glow_color': 'rgba(124, 67, 125, 0.6)',
         'button_text': 'Purchase'  # Button text (default: 'Join with Card')
     }
 }
@@ -106,6 +108,7 @@ BUSINESS_PLANS = {
         'max_members': 15,  # Maximum number of team members
         'glow_color': 'rgba(255, 255, 255, 0.6)',  # Gold glow effect
         'savings_text': '$16.25 per month',  # Optional: Custom savings text
+        'savings_color': '#7C437D',  # Optional: Custom color for savings text
         'button_text': 'Subscribe'  # Button text
     },
     'business_pro': {
@@ -122,6 +125,7 @@ BUSINESS_PLANS = {
         'max_members': 40,  # Maximum number of team members
         'glow_color': 'rgba(255, 165, 0, 0.8)',  # Orange-gold glow
         'savings_text': '$25 per month',
+        'savings_color': '#7C437D',  # Optional: Custom color for savings text
         'button_text': 'Subscribe'
     }
 }

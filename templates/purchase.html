@@ -115,7 +115,7 @@
                                     </div>
                                     <span class="period monthly-period">PER MONTH</span>
                                     <span class="period yearly-period" style="display: none;">PER YEAR</span>
-                                    <div class="yearly-savings" style="display: none;">
+                                    <div class="yearly-savings" style="display: none; {% if plan.get('savings_color') %}color: {{ plan.savings_color }};{% endif %}">
                                         {% if plan.get('savings_text') %}
                                             {{ plan.savings_text }}
                                         {% else %}
@@ -216,7 +216,7 @@
                                     </div>
                                     <span class="period business-monthly-period">PER MONTH</span>
                                     <span class="period business-yearly-period" style="display: none;">PER YEAR</span>
-                                    <div class="yearly-savings business-yearly-savings" style="display: none;">
+                                    <div class="yearly-savings business-yearly-savings" style="display: none; {% if plan.get('savings_color') %}color: {{ plan.savings_color }};{% endif %}">
                                         {% if plan.get('savings_text') %}
                                             {{ plan.savings_text }}
                                         {% else %}
