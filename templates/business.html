@@ -54,7 +54,9 @@
                 <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                 {% endif %}
                 {% if has_business %}
+                {% if is_owner %}
                 <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
+                {% endif %}
                 <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
                 {% endif %}
                 <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
@@ -73,21 +75,21 @@
                 <div class="selection-panel">
                     <div class="unified-header">
                         <div class="header-section">
-                            <div class="panel-header">Team Members ({{ members|length }}/{{ team.max_members }})</div>
+                            <div class="panel-header">Team Members ({{ active_member_count }}/{{ team.max_members }})</div>
                         </div>
                     </div>
 
                     <!-- Add Member Section -->
-                    <div class="servers-section" style="padding: 0.75rem 1rem 0 1rem; margin-bottom: 0;">
+                    <div style="padding: 0.75rem 1rem; flex-shrink: 0;">
                         <div class="panel-subheader" style="margin-bottom: 0.5rem; color: #dcddde;">Add Team Member</div>
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0;">
+                        <div style="display: flex; gap: 0.5rem;">
                             <input type="text" id="member-discord-id" class="search-input" placeholder="Enter Discord User ID..." style="flex: 1;">
                             <button id="add-member-btn" class="send-button" style="padding: 0 1rem; height: 40px; min-width: 80px;">Add</button>
                         </div>
                     </div>
 
                     <!-- Team Members List -->
-                    <div class="channels-section" style="flex: 1; display: flex; flex-direction: column; min-height: 0; margin-top: 0rem; padding-top: 0;">
+                    <div class="channels-section" style="flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: 0;">
                         <div class="panel-header" style="padding: 0 1rem; margin-bottom: 0.5rem; margin-top: 0;">Team Members</div>
                         <div id="members-list" class="channels-list">
                             {% if members|length == 0 %}
@@ -122,8 +124,11 @@
                                         {% elif status == 'left' %}
                                             <span class="status-tag status-left">Left team</span>
                                             <button class="member-remove-btn member-remove-from-list" data-member-id="{{ member.id }}">Remove from list</button>
+                                        {% elif status == 'banned' %}
+                                            <span class="status-tag status-banned">Banned</span>
+                                            <button class="member-remove-btn member-remove-from-list" data-member-id="{{ member.id }}">Remove from list</button>
                                         {% endif %}
-                                        {% if status not in ['denied', 'left'] %}
+                                        {% if status not in ['denied', 'left', 'banned'] %}
                                             <button class="member-remove-btn" data-discord-id="{{ member.member_discord_id }}">✕</button>
                                         {% endif %}
                                     </div>
@@ -146,7 +151,7 @@
                         <div class="panel-subheader" style="margin-bottom: 0.5rem; color: #dcddde;">
                             This message will be used by all team members when sending from Business Panel
                         </div>
-                        <textarea id="team-message-input" class="message-input" placeholder="Enter the message your team will be using here..." maxlength="2000" style="flex: 1; margin-bottom: 0.5rem;">{{ team.team_message or '' }}</textarea>
+                        <textarea id="team-message-input" class="message-input" placeholder="Enter the message your team will be using, leaving this empty or setting the team message whilst empty will result in team members not being able to send anything..." maxlength="2000" style="flex: 1; margin-bottom: 0.5rem;">{{ team.team_message or '' }}</textarea>
                         <div class="message-footer">
                             <span class="char-count"><span id="char-count">{{ (team.team_message or '')|length }}</span>/2000</span>
                             <button id="set-message-btn" class="send-button">
@@ -290,6 +295,12 @@
             border: 1px solid rgba(231, 76, 60, 0.4);
         }
 
+        .status-banned {
+            background: rgba(192, 57, 43, 0.3);
+            color: #c0392b;
+            border: 1px solid rgba(192, 57, 43, 0.5);
+        }
+
         .status-has-account {
             background: rgba(46, 204, 113, 0.2);
             color: #2ecc71;
@@ -318,6 +329,24 @@
         .member-remove-btn:hover {
             background: rgba(223, 40, 31, 0.2);
             transform: scale(1.1);
+        }
+
+        .member-remove-from-list {
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            background: rgba(231, 76, 60, 0.2);
+            color: #E74C3C;
+            border: 1px solid rgba(231, 76, 60, 0.4);
+        }
+
+        .member-remove-from-list:hover {
+            background: rgba(231, 76, 60, 0.3);
+            transform: none;
         }
 
         .panel-subheader {
@@ -443,7 +472,7 @@
             const charCount = document.getElementById('char-count');
 
             const maxMembers = {{ team.max_members }};
-            let currentMemberCount = {{ members|length }};
+            let currentMemberCount = {{ active_member_count }};
 
             // Dropdown menu toggle
             if (menuIcon) {

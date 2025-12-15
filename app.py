@@ -116,6 +116,12 @@ def has_business_access(user_id, discord_id):
 
     return False
 
+def is_business_owner(user_id):
+    """Check if user is specifically a business team owner."""
+    from database import get_business_team_by_owner
+    team = get_business_team_by_owner(user_id)
+    return team is not None
+
 def fetch_discord_user_info(discord_id):
     """Fetch user information from Discord API using bot token."""
     bot_token = os.getenv('DISCORD_BOT_TOKEN')
@@ -183,6 +189,7 @@ def home():
     plan_status = None
     has_business = False
     is_admin_user = False
+    is_owner = False
     if 'user' in session:
         user = get_user_by_discord_id(session['user']['id'])
         if user:
@@ -190,6 +197,7 @@ def home():
             # Check if user has business access (owner or member)
             from database import is_business_plan_owner, is_business_team_member
             has_business = is_business_plan_owner(user['id']) or is_business_team_member(session['user']['id'])
+            is_owner = is_business_owner(user['id'])
             # Check if user is admin
             is_admin_user = is_admin(session['user']['id'])
 
@@ -205,6 +213,7 @@ def home():
                          scroll_indicator_text=HOMEPAGE['hero']['scroll_indicator_text'],
                          plan_status=plan_status,
                          has_business=has_business,
+                         is_owner=is_owner,
                          is_admin_user=is_admin_user)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -469,11 +478,13 @@ def purchase():
     plan_status = None
     has_business = False
     is_admin_user = False
+    is_owner = False
     if 'user' in session:
         user = get_user_by_discord_id(session['user']['id'])
         if user:
             plan_status = get_plan_status(user['id'])
             has_business = has_business_access(user['id'], session['user']['id'])
+            is_owner = is_business_owner(user['id'])
             is_admin_user = is_admin(session['user']['id'])
 
     return render_template('purchase.html',
@@ -482,6 +493,7 @@ def purchase():
                          business_plans=BUSINESS_PLANS,
                          plan_status=plan_status,
                          has_business=has_business,
+                         is_owner=is_owner,
                          is_admin_user=is_admin_user)
 
 @app.route('/api/set-plan', methods=['POST'])
@@ -679,7 +691,7 @@ def panel():
     # Check if user is admin
     is_admin_user = is_admin(session['user']['id'])
 
-    response = app.make_response(render_template('dashboard.html', user=session['user'], guilds=guilds, plan_status=plan_status, user_data=user_data, has_business=has_business, is_admin_user=is_admin_user, BLACKLISTED_WORDS=BLACKLISTED_WORDS))
+    response = app.make_response(render_template('dashboard.html', user=session['user'], guilds=guilds, plan_status=plan_status, user_data=user_data, has_business=has_business, is_owner=is_business_owner(user['id']), is_admin_user=is_admin_user, BLACKLISTED_WORDS=BLACKLISTED_WORDS))
     # Prevent caching of dashboard page
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -736,12 +748,40 @@ def send_message_single():
     if 'authenticated' not in session:
         return {'error': 'Unauthorized'}, 401
 
-    # Check usage limits
+    # Get user
     user = get_user_by_discord_id(session['user']['id'])
     if not user:
         return {'error': 'User not found'}, 404
 
-    can_send, reason, remaining = can_send_message(user['id'])
+    data = request.json
+    if not data:
+        return {'error': 'Invalid request data'}, 400
+
+    is_business = data.get('is_business', False)
+    owner_user_id = None  # Will be set if business send
+
+    if is_business:
+        # For business sends, check owner's usage limits
+        from database import get_business_team_by_owner, get_business_team_by_member, get_user_by_id
+        team = get_business_team_by_owner(user['id'])
+        if team:
+            # User is owner
+            owner_user_id = user['id']
+        else:
+            # User is member - get owner
+            team = get_business_team_by_member(session['user']['id'])
+            if team:
+                owner_user_id = team['owner_user_id']
+
+        if not owner_user_id:
+            return {'error': 'No business team found'}, 404
+
+        # Check owner's usage limits for business sends
+        can_send, reason, remaining = can_send_message(owner_user_id)
+    else:
+        # For personal sends, check user's own limits
+        can_send, reason, remaining = can_send_message(user['id'])
+
     if not can_send:
         return {'error': f'Cannot send message: {reason}', 'limit_reached': True}, 403
 
@@ -750,10 +790,6 @@ def send_message_single():
     if not user_token:
         return {'error': 'Token error'}, 401
     headers = {'Authorization': user_token, 'Content-Type': 'application/json'}
-
-    data = request.json
-    if not data:
-        return {'error': 'Invalid request data'}, 400
 
     channel = data.get('channel', {})
     message_content = data.get('message', '').strip()
@@ -787,8 +823,14 @@ def send_message_single():
         )
 
         if resp.status_code == 200 or resp.status_code == 201:
-            # Track successful send in database
-            record_successful_send(user['id'])
+            if is_business and owner_user_id:
+                # For business sends: update owner's usage (team pool) and member's business stats
+                from database import increment_business_usage
+                record_successful_send(owner_user_id)  # Owner's pool gets decremented
+                increment_business_usage(user['id'])   # Member's business stats get updated
+            else:
+                # For personal sends: update user's own usage
+                record_successful_send(user['id'])
             # Also update session for backward compatibility
             if 'sent_count' not in session:
                 session['sent_count'] = 0
@@ -931,7 +973,7 @@ def business_management():
         return redirect(url_for('home'))
 
     # Check if user owns a business plan
-    from database import get_business_team_by_owner, get_team_members, get_team_member_stats, update_team_member_info
+    from database import get_business_team_by_owner, get_team_members, get_team_member_stats, update_team_member_info, get_team_member_count
     team = get_business_team_by_owner(user['id'])
 
     if not team:
@@ -952,6 +994,9 @@ def business_management():
     member_stats = get_team_member_stats(team['id'])
     plan_status = get_plan_status(user['id'])
 
+    # Get active member count (only accepted members)
+    active_member_count = get_team_member_count(team['id'])
+
     # User has business access (they're on this page)
     has_business = True
 
@@ -965,7 +1010,9 @@ def business_management():
                          member_stats=member_stats,
                          plan_status=plan_status,
                          has_business=has_business,
+                         is_owner=True,
                          is_admin_user=is_admin_user,
+                         active_member_count=active_member_count,
                          BLACKLISTED_WORDS=BLACKLISTED_WORDS)
 
 @app.route('/business-panel')
@@ -1031,6 +1078,7 @@ def business_panel():
                                                 plan_status=plan_status,
                                                 user_data=user_data,
                                                 has_business=has_business,
+                                                is_owner=is_business_owner(user['id']),
                                                 is_admin_user=is_admin_user,
                                                 BLACKLISTED_WORDS=BLACKLISTED_WORDS))
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
@@ -1088,6 +1136,7 @@ def settings():
                                                 plan_status=plan_status,
                                                 user_data=user_data,
                                                 has_business=has_business,
+                                                is_owner=is_business_owner(user['id']),
                                                 is_admin_user=is_admin_user,
                                                 business_plan_status=business_plan_status))
     # Prevent caching of settings page
@@ -1268,6 +1317,10 @@ def add_business_member():
         member_user = get_user_check(member_discord_id)
         if member_user and member_user.get('banned', 0) == 1:
             return {'success': False, 'error': 'This user is banned and cannot be added to teams'}, 403
+
+        # Check if the user being added is a business plan owner themselves
+        if member_user and is_business_owner(member_user['id']):
+            return {'success': False, 'error': 'This user is a business plan owner and cannot be added to other teams'}, 400
 
         # Check if team is full
         current_count = get_team_member_count(team['id'])
@@ -1475,6 +1528,63 @@ def clear_invitations():
         return {'success': False, 'error': str(e)}, 500
 
 
+@app.route('/api/team/current', methods=['GET'])
+def get_current_team():
+    """Get the current team info for the logged in user."""
+    if 'user' not in session:
+        return {'success': False, 'error': 'Not logged in'}, 401
+
+    try:
+        from database import get_current_team_for_member, get_business_team_by_owner, get_team_members
+
+        user = get_user_by_discord_id(session['user']['id'])
+        if not user:
+            return {'success': False, 'error': 'User not found'}, 404
+
+        # Check if user is a business plan owner
+        owner_team = get_business_team_by_owner(user['id'])
+        if owner_team:
+            # Get team members (only accepted ones)
+            members = get_team_members(owner_team['id'])
+            accepted_members = [m for m in members if m.get('status') == 'accepted']
+
+            return {
+                'success': True,
+                'is_owner': True,
+                'in_team': False,
+                'owner_info': {
+                    'username': user.get('username'),
+                    'discord_id': user.get('discord_id'),
+                    'avatar': user.get('avatar')
+                },
+                'team_members': [{
+                    'username': m.get('member_username'),
+                    'discord_id': m.get('member_discord_id'),
+                    'avatar': m.get('member_avatar')
+                } for m in accepted_members]
+            }, 200
+
+        # Check if user is a team member
+        team = get_current_team_for_member(session['user']['id'])
+        if not team:
+            return {'success': True, 'in_team': False, 'is_owner': False}, 200
+
+        return {
+            'success': True,
+            'in_team': True,
+            'is_owner': False,
+            'team': {
+                'owner_username': team.get('owner_username'),
+                'owner_discord_id': team.get('owner_discord_id'),
+                'owner_avatar': team.get('owner_avatar')
+            }
+        }, 200
+
+    except Exception as e:
+        print(f"[ERROR] Get current team error: {str(e)}")
+        return {'success': False, 'error': str(e)}, 500
+
+
 @app.route('/api/team/leave', methods=['POST'])
 def leave_team_route():
     """Leave the current team."""
@@ -1573,7 +1683,10 @@ def admin_panel():
                                                 user=session['user'],
                                                 plan_status=plan_status,
                                                 has_business=has_business,
-                                                is_admin_user=is_admin_user))
+                                                is_owner=is_business_owner(user['id']),
+                                                is_admin_user=is_admin_user,
+                                                db_version=DATABASE_VERSION,
+                                                db_wipe_message=DATABASE_WIPE_MESSAGE))
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
@@ -1605,7 +1718,9 @@ def admin_get_users():
         return {'success': True, 'users': users}, 200
 
     except Exception as e:
+        import traceback
         print(f"[ERROR] Admin get users error: {str(e)}")
+        traceback.print_exc()
         return {'success': False, 'error': str(e)}, 500
 
 @app.route('/api/admin/search-user', methods=['GET'])
@@ -1830,10 +1945,10 @@ def admin_get_user_message(user_id):
         # Get user_data which contains draft_message
         user_data = get_user_data(user_id)
         if not user_data:
-            return {'success': True, 'message': 'No message saved'}, 200
+            return {'success': True, 'message': '', 'has_message': False}, 200
 
         draft_message = user_data.get('draft_message', '')
-        return {'success': True, 'message': draft_message or 'No message saved'}, 200
+        return {'success': True, 'message': draft_message or '', 'has_message': bool(draft_message)}, 200
 
     except Exception as e:
         print(f"[ERROR] Admin get user message error: {str(e)}")
@@ -1866,7 +1981,7 @@ def admin_get_team_message(user_id):
             return {'success': False, 'error': 'User is not part of any business team'}, 404
 
         team_message = team.get('team_message', '')
-        return {'success': True, 'message': team_message or 'No team message set'}, 200
+        return {'success': True, 'message': team_message or '', 'has_message': bool(team_message)}, 200
 
     except Exception as e:
         print(f"[ERROR] Admin get team message error: {str(e)}")

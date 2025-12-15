@@ -48,7 +48,7 @@ The application will be available at `http://localhost:5000`
 ## Project Structure
 
 ```
-borz_adveristing_website/
+BorzMarketing/
 ├── app.py                    # Flask application
 ├── requirements.txt          # Python dependencies
 ├── config/                   # Configuration files

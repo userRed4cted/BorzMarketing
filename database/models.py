@@ -515,6 +515,19 @@ def increment_usage(user_id):
     conn.commit()
     conn.close()
 
+def increment_business_usage(user_id):
+    """Increment the business usage counters for a team member."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE usage
+        SET business_messages_sent = business_messages_sent + 1,
+            business_all_time_sent = business_all_time_sent + 1
+        WHERE user_id = ?
+    ''', (user_id,))
+    conn.commit()
+    conn.close()
+
 def reset_usage(user_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -1019,12 +1032,12 @@ def leave_team(discord_id):
 
 
 def remove_team_member_from_list(member_id):
-    """Remove a team member from the list (for denied/left members)."""
+    """Remove a team member from the list (for denied/left/banned members)."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM business_team_members
-        WHERE id = ? AND invitation_status IN ('denied', 'left')
+        WHERE id = ? AND invitation_status IN ('denied', 'left', 'banned')
     ''', (member_id,))
     conn.commit()
     conn.close()
@@ -1083,7 +1096,7 @@ def get_all_users_for_admin(filters=None):
     users = [dict(row) for row in cursor.fetchall()]
 
     # Add is_admin flag for each user
-    from admin_config import is_admin
+    from config import is_admin
     for user in users:
         user['is_admin'] = is_admin(user['discord_id'])
 
@@ -1106,7 +1119,7 @@ def get_user_admin_details(user_id):
     user = dict(result)
 
     # Check if user is admin
-    from admin_config import is_admin
+    from config import is_admin
     user['is_admin'] = is_admin(user['discord_id'])
 
     # Get active subscriptions
@@ -1148,9 +1161,31 @@ def get_user_admin_details(user_id):
 
 
 def ban_user(user_id):
-    """Ban a user."""
+    """Ban a user and remove them from teams/invitations."""
     conn = get_db()
     cursor = conn.cursor()
+
+    # Get user's discord_id
+    cursor.execute('SELECT discord_id FROM users WHERE id = ?', (user_id,))
+    user_row = cursor.fetchone()
+
+    if user_row:
+        discord_id = user_row[0]
+
+        # Mark accepted team memberships as 'banned' (similar to 'left')
+        cursor.execute('''
+            UPDATE business_team_members
+            SET invitation_status = 'banned'
+            WHERE member_discord_id = ? AND invitation_status = 'accepted'
+        ''', (discord_id,))
+
+        # Delete all pending invitations for this user
+        cursor.execute('''
+            DELETE FROM business_team_members
+            WHERE member_discord_id = ? AND invitation_status = 'pending'
+        ''', (discord_id,))
+
+    # Update user's banned status
     cursor.execute('UPDATE users SET banned = 1 WHERE id = ?', (user_id,))
     conn.commit()
     conn.close()

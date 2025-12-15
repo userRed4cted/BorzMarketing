@@ -54,7 +54,9 @@
                     <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                 {% endif %}
                 {% if has_business %}
+                {% if is_owner %}
                 <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
+                {% endif %}
                 <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
                 {% endif %}
                 <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
@@ -331,9 +333,11 @@
 
                             <!-- Current Team Status -->
                             <div id="current-team-container" style="margin-top: auto; padding-top: 1rem; padding-bottom: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
-                                <div style="color: #dcddde; font-weight: 500; font-size: 0.9rem; margin-bottom: 0.5rem;">Current Team</div>
-                                <div id="current-team-status" style="color: #8e9297; font-size: 0.85rem; margin-bottom: 1rem;">Not in any team</div>
-                                <button id="leaveTeamBtn" class="delete-account-btn" style="opacity: 0.5; cursor: not-allowed;" disabled>Leave Team</button>
+                                <div style="color: #dcddde; font-weight: 500; font-size: 0.9rem; margin-bottom: 0.75rem;">Current Team</div>
+                                <div id="current-team-content">
+                                    <!-- Will be populated by JavaScript - either "Not in any team" or team owner card -->
+                                    <div id="no-team-status" style="color: #8e9297; font-size: 0.85rem;">Not in any team</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -623,7 +627,7 @@
 
                             data.invitations.forEach(invitation => {
                                 const invitationCard = document.createElement('div');
-                                invitationCard.style.cssText = 'background: #2c2f33; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem;';
+                                invitationCard.style.cssText = 'background: #191A1F; border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem;';
 
                                 // Avatar
                                 const avatarDiv = document.createElement('div');
@@ -646,15 +650,16 @@
                                 actionsDiv.style.cssText = 'display: flex; gap: 0.5rem;';
 
                                 const joinBtn = document.createElement('button');
-                                joinBtn.textContent = 'Join team';
-                                joinBtn.className = 'team-action-btn';
-                                joinBtn.style.cssText = 'padding: 0.4rem 1rem; background: #5865f2; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 0.85rem;';
+                                joinBtn.textContent = 'Join';
+                                joinBtn.className = 'auth-btn login-btn team-join-btn';
+                                joinBtn.style.cssText = 'padding: 0.5rem 1.25rem; font-size: 0.85rem;';
                                 joinBtn.dataset.memberId = invitation.id;
+                                joinBtn.dataset.confirmed = 'false';
 
                                 const denyBtn = document.createElement('button');
                                 denyBtn.innerHTML = '✕';
                                 denyBtn.className = 'team-deny-btn';
-                                denyBtn.style.cssText = 'padding: 0.4rem 0.6rem; background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; color: #e74c3c; cursor: pointer; font-size: 0.9rem;';
+                                denyBtn.style.cssText = 'width: 28px; height: 28px; background: transparent; border: none; border-radius: 4px; color: #e74c3c; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;';
                                 denyBtn.dataset.memberId = invitation.id;
 
                                 if (acceptedInvitation) {
@@ -663,8 +668,35 @@
                                     joinBtn.style.cursor = 'not-allowed';
                                 }
 
-                                joinBtn.addEventListener('click', () => acceptInvitation(invitation.id));
+                                joinBtn.addEventListener('click', () => {
+                                    if (joinBtn.dataset.confirmed === 'false') {
+                                        joinBtn.dataset.confirmed = 'true';
+                                        joinBtn.textContent = 'Confirm';
+                                        joinBtn.style.background = '#c0392b';
+
+                                        // Auto-reset after 3 seconds
+                                        setTimeout(() => {
+                                            if (joinBtn.dataset.confirmed === 'true') {
+                                                joinBtn.dataset.confirmed = 'false';
+                                                joinBtn.textContent = 'Join';
+                                                joinBtn.style.background = '';
+                                            }
+                                        }, 3000);
+                                    } else {
+                                        acceptInvitation(invitation.id);
+                                    }
+                                });
                                 denyBtn.addEventListener('click', () => denyInvitation(invitation.id));
+
+                                // Hover effect for deny button
+                                denyBtn.addEventListener('mouseenter', () => {
+                                    denyBtn.style.background = 'rgba(231, 76, 60, 0.2)';
+                                    denyBtn.style.transform = 'scale(1.1)';
+                                });
+                                denyBtn.addEventListener('mouseleave', () => {
+                                    denyBtn.style.background = 'transparent';
+                                    denyBtn.style.transform = 'scale(1)';
+                                });
 
                                 actionsDiv.appendChild(joinBtn);
                                 actionsDiv.appendChild(denyBtn);
@@ -687,21 +719,19 @@
         }
 
         function acceptInvitation(memberId) {
-            if (confirm('Accept this team invitation? All other pending invitations will be denied.')) {
-                fetch(`/api/team/invitation/accept/${memberId}`, { method: 'POST', headers: { 'X-CSRF-Token': '{{ csrf_token }}' } })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            acceptedInvitation = true;
-                            alert('Team invitation accepted!');
-                            loadTeamInvitations();
-                            loadCurrentTeam();
-                        } else {
-                            alert('Error: ' + data.error);
-                        }
-                    })
-                    .catch(error => alert('Error accepting invitation: ' + error));
-            }
+            fetch(`/api/team/invitation/accept/${memberId}`, { method: 'POST', headers: { 'X-CSRF-Token': '{{ csrf_token }}' } })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        acceptedInvitation = true;
+                        alert('Team invitation accepted!');
+                        loadTeamInvitations();
+                        loadCurrentTeam();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => alert('Error accepting invitation: ' + error));
         }
 
         function denyInvitation(memberId) {
@@ -717,24 +747,134 @@
                 .catch(error => alert('Error denying invitation: ' + error));
         }
 
+        let leaveTeamConfirmed = false;
+
         function loadCurrentTeam() {
-            // This will be shown via server-side rendering or API call
-            // For now, we can add a simple check
-            fetch('/api/team/invitations')
+            fetch('/api/team/current')
                 .then(response => response.json())
                 .then(data => {
-                    const currentTeamStatus = document.getElementById('current-team-status');
-                    const leaveTeamBtn = document.getElementById('leaveTeamBtn');
+                    const currentTeamContent = document.getElementById('current-team-content');
+                    const invitationsList = document.getElementById('invitations-list');
 
-                    // Check if user has accepted any invitation
-                    if (acceptedInvitation) {
-                        currentTeamStatus.textContent = 'Member of a team';
-                        currentTeamStatus.style.color = '#5865f2';
-                        leaveTeamBtn.disabled = false;
-                        leaveTeamBtn.style.opacity = '1';
-                        leaveTeamBtn.style.cursor = 'pointer';
+                    if (data.success && data.is_owner) {
+                        // User is a business plan owner - show their own team card (like members see)
+                        const owner = data.owner_info;
+
+                        // Update invitations list to show owner can't join other teams
+                        if (invitationsList) {
+                            invitationsList.innerHTML = '<div style="color: #8e9297; font-size: 0.9rem; text-align: center; padding: 2rem;">Team owner, can\'t join other teams</div>';
+                        }
+                        // Disable clear all button
+                        const clearAllBtn = document.getElementById('clearAllInvitationsBtn');
+                        if (clearAllBtn) {
+                            clearAllBtn.disabled = true;
+                            clearAllBtn.style.opacity = '0.5';
+                            clearAllBtn.style.cursor = 'not-allowed';
+                        }
+
+                        // Show owner's own team card (like members see, but without leave button)
+                        let avatarHtml;
+                        if (owner.avatar) {
+                            avatarHtml = `<img src="https://cdn.discordapp.com/avatars/${owner.discord_id}/${owner.avatar}.png" style="width: 40px; height: 40px; border-radius: 50%;">`;
+                        } else {
+                            avatarHtml = `<div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">${(owner.username || 'U')[0].toUpperCase()}</div>`;
+                        }
+
+                        currentTeamContent.innerHTML = `
+                            <div style="color: #8e9297; font-size: 0.85rem; margin-bottom: 0.75rem;">You're the team owner of</div>
+                            <div style="background: #191A1F; border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem;">
+                                <div>${avatarHtml}</div>
+                                <div style="flex: 1;">
+                                    <div style="color: #dcddde; font-weight: 500;">${owner.username || 'Unknown User'}</div>
+                                    <div style="color: #8e9297; font-size: 0.85rem;">${owner.discord_id}</div>
+                                </div>
+                                <div style="color: #5865f2; font-size: 0.8rem; font-weight: 500;">Owner</div>
+                            </div>
+                        `;
+                    } else if (data.success && data.in_team) {
+                        const team = data.team;
+                        acceptedInvitation = true;
+
+                        // Create team owner card with leave button
+                        let avatarHtml;
+                        if (team.owner_avatar) {
+                            avatarHtml = `<img src="https://cdn.discordapp.com/avatars/${team.owner_discord_id}/${team.owner_avatar}.png" style="width: 40px; height: 40px; border-radius: 50%;">`;
+                        } else {
+                            avatarHtml = `<div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">${team.owner_username[0].toUpperCase()}</div>`;
+                        }
+
+                        currentTeamContent.innerHTML = `
+                            <div style="color: #8e9297; font-size: 0.85rem; margin-bottom: 0.75rem;">You're a team member of</div>
+                            <div style="background: #191A1F; border-radius: 8px; padding: 1rem; display: flex; align-items: center; gap: 1rem;">
+                                <div>${avatarHtml}</div>
+                                <div style="flex: 1;">
+                                    <div style="color: #dcddde; font-weight: 500;">${team.owner_username}</div>
+                                    <div style="color: #8e9297; font-size: 0.85rem;">${team.owner_discord_id}</div>
+                                </div>
+                                <button id="leaveTeamBtn" class="delete-account-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Leave</button>
+                            </div>
+                        `;
+
+                        // Attach leave button handler
+                        document.getElementById('leaveTeamBtn').addEventListener('click', handleLeaveTeam);
+                    } else {
+                        acceptedInvitation = false;
+                        currentTeamContent.innerHTML = '<div id="no-team-status" style="color: #8e9297; font-size: 0.85rem;">Not in any team</div>';
                     }
+                })
+                .catch(error => {
+                    console.error('Error loading current team:', error);
+                    document.getElementById('current-team-content').innerHTML = '<div style="color: #8e9297; font-size: 0.85rem;">Not in any team</div>';
                 });
+        }
+
+        function handleLeaveTeam() {
+            const leaveBtn = document.getElementById('leaveTeamBtn');
+
+            if (!leaveTeamConfirmed) {
+                if (confirm('Leave your current team? You will need to accept a new invitation to join another team.')) {
+                    leaveTeamConfirmed = true;
+                    leaveBtn.textContent = 'Confirm';
+                    leaveBtn.style.background = '#c0392b';
+
+                    // Auto-reset after 3 seconds
+                    setTimeout(() => {
+                        if (leaveTeamConfirmed && document.getElementById('leaveTeamBtn')) {
+                            leaveTeamConfirmed = false;
+                            document.getElementById('leaveTeamBtn').textContent = 'Leave';
+                            document.getElementById('leaveTeamBtn').style.background = '';
+                        }
+                    }, 3000);
+                }
+            } else {
+                leaveBtn.textContent = 'Leaving...';
+                leaveBtn.disabled = true;
+
+                fetch('/api/team/leave', { method: 'POST', headers: { 'X-CSRF-Token': '{{ csrf_token }}' } })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Left team successfully');
+                            leaveTeamConfirmed = false;
+                            acceptedInvitation = false;
+                            loadCurrentTeam();
+                            loadTeamInvitations();
+                        } else {
+                            alert('Error: ' + data.error);
+                            leaveTeamConfirmed = false;
+                            leaveBtn.textContent = 'Leave';
+                            leaveBtn.disabled = false;
+                            leaveBtn.style.background = '';
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error leaving team: ' + error);
+                        leaveTeamConfirmed = false;
+                        leaveBtn.textContent = 'Leave';
+                        leaveBtn.disabled = false;
+                        leaveBtn.style.background = '';
+                    });
+            }
         }
 
         // Clear all invitations
@@ -750,45 +890,6 @@
                         }
                     })
                     .catch(error => alert('Error clearing invitations: ' + error));
-            }
-        });
-
-        // Leave team
-        let leaveTeamConfirmed = false;
-        document.getElementById('leaveTeamBtn').addEventListener('click', () => {
-            if (!leaveTeamConfirmed) {
-                if (confirm('Leave your current team? You will need to accept a new invitation to join another team.')) {
-                    leaveTeamConfirmed = true;
-                    document.getElementById('leaveTeamBtn').textContent = 'Confirm Leave';
-                    document.getElementById('leaveTeamBtn').style.background = '#c0392b';
-                }
-            } else {
-                fetch('/api/team/leave', { method: 'POST', headers: { 'X-CSRF-Token': '{{ csrf_token }}' } })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert('Left team successfully');
-                            acceptedInvitation = false;
-                            leaveTeamConfirmed = false;
-                            document.getElementById('leaveTeamBtn').textContent = 'Leave Team';
-                            document.getElementById('leaveTeamBtn').disabled = true;
-                            document.getElementById('leaveTeamBtn').style.opacity = '0.5';
-                            document.getElementById('leaveTeamBtn').style.cursor = 'not-allowed';
-                            document.getElementById('leaveTeamBtn').style.background = '';
-                            document.getElementById('current-team-status').textContent = 'Not in any team';
-                            document.getElementById('current-team-status').style.color = '#8e9297';
-                            loadTeamInvitations();
-                        } else {
-                            alert('Error: ' + data.error);
-                            leaveTeamConfirmed = false;
-                            document.getElementById('leaveTeamBtn').textContent = 'Leave Team';
-                        }
-                    })
-                    .catch(error => {
-                        alert('Error leaving team: ' + error);
-                        leaveTeamConfirmed = false;
-                        document.getElementById('leaveTeamBtn').textContent = 'Leave Team';
-                    });
             }
         });
 

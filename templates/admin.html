@@ -444,7 +444,9 @@
                 <a href="{{ url_for('panel') }}" class="dropdown-item">Panel</a>
                 {% endif %}
                 {% if has_business %}
+                {% if is_owner %}
                 <a href="{{ url_for('business_management') }}" class="dropdown-item">Business Management</a>
+                {% endif %}
                 <a href="{{ url_for('business_panel') }}" class="dropdown-item">Business Panel</a>
                 {% endif %}
                 <a href="{{ url_for('settings') }}" class="dropdown-item">Settings</a>
@@ -843,10 +845,10 @@
                 if (data.success) {
                     currentMessageContent = data.message;
                     document.getElementById('dialog-title').textContent = 'User Saved Message';
-                    document.getElementById('dialog-message').textContent = data.message;
+                    document.getElementById('dialog-message').textContent = data.has_message ? data.message : 'No message saved';
 
                     const copyBtn = document.getElementById('copy-message-btn');
-                    if (!data.message || data.message.trim() === '') {
+                    if (!data.has_message) {
                         copyBtn.disabled = true;
                         copyBtn.style.opacity = '0.5';
                         copyBtn.style.cursor = 'not-allowed';
@@ -873,10 +875,10 @@
                 if (data.success) {
                     currentMessageContent = data.message;
                     document.getElementById('dialog-title').textContent = 'Business Team Message';
-                    document.getElementById('dialog-message').textContent = data.message;
+                    document.getElementById('dialog-message').textContent = data.has_message ? data.message : 'No team message set';
 
                     const copyBtn = document.getElementById('copy-message-btn');
-                    if (!data.message || data.message.trim() === '') {
+                    if (!data.has_message) {
                         copyBtn.disabled = true;
                         copyBtn.style.opacity = '0.5';
                         copyBtn.style.cursor = 'not-allowed';

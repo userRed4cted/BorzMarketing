@@ -13,7 +13,7 @@ from .models import (
     get_team_member_stats, update_team_member_info, get_team_member_count,
     add_team_member, remove_team_member, update_team_message,
     create_business_team, is_business_plan_owner, is_business_team_member,
-    cancel_subscription, get_business_plan_status,
+    cancel_subscription, get_business_plan_status, increment_business_usage,
     get_team_invitations, accept_team_invitation, deny_team_invitation,
     clear_all_invitations, leave_team, get_current_team_for_member,
     remove_team_member_from_list
